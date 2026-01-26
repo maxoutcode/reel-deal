@@ -1,0 +1,80 @@
+{
+  "name": "reel-deal",
+  "version": "0.1.0-dev.1",
+  "description": "High-performance WebGL slot reel animation for any HTMLCanvasElement.",
+  "author": "ux-ui.pro",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ux-ui-pro/reel-deal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ux-ui-pro/reel-deal/issues"
+  },
+  "homepage": "https://github.com/ux-ui-pro/reel-deal",
+  "sideEffects": false,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "vite build",
+    "dev": "vite",
+    "verify": "yarn lint && yarn typecheck",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "format": "biome format --write src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "yarn clean && yarn build && yarn verify"
+  },
+  "source": "src/index.ts",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.es.js",
+  "browser": "./dist/index.umd.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.cjs.js",
+      "default": "./dist/index.umd.js"
+    },
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "2.3.12",
+    "@types/node": "25.0.10",
+    "rimraf": "6.1.2",
+    "typescript": "5.9.3",
+    "vite": "7.3.1",
+    "vite-plugin-dts": "4.5.4"
+  },
+  "keywords": [
+    "typescript",
+    "javascript",
+    "canvas",
+    "html5-canvas",
+    "webgl",
+    "animation",
+    "slot",
+    "slots",
+    "slot-machine",
+    "reel",
+    "reels",
+    "slot-reel",
+    "casino",
+    "game",
+    "sprite",
+    "spritesheet",
+    "motion-blur",
+    "performance",
+    "dpr",
+    "browser"
+  ]
+}

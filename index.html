@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ReelDeal • Dev</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #121212;
+      }
+
+      #reelWrap {
+        width: clamp(160px, 90vw, 660px);
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        padding: 10px 14px;
+        background: #fafafa;
+        color: #121212;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <button
+      id="spinBtn"
+      type="button"
+    >
+      Spin
+    </button>
+    <div id="reelWrap">
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <script type="module">
+      import { ReelDeal } from './src/index.ts';
+
+      const container = document.getElementById('reelWrap');
+      const canvas = document.getElementById('canvas');
+      const button = document.getElementById('spinBtn');
+
+      if (!container || !canvas || !button) {
+        throw new Error('Demo DOM is not ready');
+      }
+
+      const reel = new ReelDeal({
+        canvas,
+        container,
+        button,
+        sprite: new URL('./demo/assets/test.webp', import.meta.url).href,
+        slotCount: 8,
+        reels: 3,
+        spinConfig: {
+          minSpins: 2,
+          durationMs: 4000,
+          speedPxS: 4000,
+          staggerMs: 400,
+        },
+        initialSegments: [3, 2, 0],
+        queuedSpinStates: [
+          {
+            stopAtSegments: [1, 1, 0],
+            callback: () => {
+              console.log('[ReelDeal] spin complete');
+            },
+          },
+          {
+            stopAtSegments: [0, 1, 2],
+            callback: () => {
+              console.log('[ReelDeal] spin complete');
+            },
+          },
+          {
+            stopAtSegments: [4, 4, 4],
+            callback: () => {
+              console.log('[ReelDeal] spin complete');
+            },
+          },
+        ],
+      });
+
+      await reel.init();
+    </script>
+  </body>
+</html>
