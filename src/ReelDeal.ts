@@ -4,7 +4,6 @@ import {
   normalizeMaxDpr,
   normalizeSpinBlur,
   normalizeSpinConfig,
-  normalizeWebGLShading,
 } from './normalize';
 import type {
   ReelDealIdleBob,
@@ -12,10 +11,9 @@ import type {
   ReelDealSpinBlur,
   ReelDealSpinConfig,
   ReelDealSpinState,
-  ReelDealWebGLShading,
 } from './types';
 import { resolveElement } from './utils/dom';
-import { clamp01, clampInt, mod, rampHermite, reelProgress } from './utils/math';
+import { clamp01, clampInt, mod, nonNegative, rampHermite, reelProgress } from './utils/math';
 
 const MAX_REELS = 5;
 const SPIN_TICK_START = 0.72;
@@ -23,12 +21,36 @@ const SPIN_TICK_RANGE = 0.28;
 const SPIN_TICK_MAX_PX = 7;
 const VELOCITY_DECAY = 0.85;
 const VELOCITY_GAIN = 1 - VELOCITY_DECAY;
+const STOP_SPRING_OVERSHOOT_PX = 30;
+const STOP_SPRING_SETTLE_MS = 500;
+const STOP_SPRING_OSCILLATIONS = 1.25;
+const STOP_SPRING_DAMPING = 4;
+const STOP_SPRING_MAX_RATIO = 0.25;
+
+type WebGLShadingConfig = {
+  warpAngleDeg: number;
+  edgePower: number;
+};
+
+const DEFAULT_WEBGL_SHADING: WebGLShadingConfig = {
+  warpAngleDeg: 360,
+  edgePower: 0.5,
+};
+
+const normalizeWebGLShading = (
+  overrides?: Partial<WebGLShadingConfig>,
+): WebGLShadingConfig => ({
+  warpAngleDeg: nonNegative(overrides?.warpAngleDeg, DEFAULT_WEBGL_SHADING.warpAngleDeg),
+  edgePower: nonNegative(overrides?.edgePower, DEFAULT_WEBGL_SHADING.edgePower),
+});
 
 type SpinAnimation = {
   startTime: number;
   startOffsets: number[];
   deltas: number[];
   durationMs: number[];
+  settleDurationMs: number[];
+  targets: number[];
 };
 
 export class ReelDeal {
@@ -42,7 +64,7 @@ export class ReelDeal {
   private readonly reels: number;
   private readonly spinConfig: NormalizedSpinConfig;
   private readonly spinBlur: ReelDealSpinBlur;
-  private readonly webglShading: ReelDealWebGLShading;
+  private readonly webglShading: WebGLShadingConfig;
   private readonly idleBob: ReelDealIdleBob | null;
   private readonly maxDpr: number;
 
@@ -99,7 +121,9 @@ export class ReelDeal {
     this.reels = clampInt(options.reels ?? 1, 1, MAX_REELS);
     this.spinConfig = normalizeSpinConfig(options.spinConfig);
     this.spinBlur = normalizeSpinBlur(options.spinBlur);
-    this.webglShading = normalizeWebGLShading(options.webglShading);
+    this.webglShading = normalizeWebGLShading(
+      (options as { webglShading?: Partial<WebGLShadingConfig> }).webglShading,
+    );
     this.idleBob = normalizeIdleBob(options.idleBob);
     this.maxDpr = normalizeMaxDpr(options.maxDpr);
 
@@ -208,10 +232,15 @@ export class ReelDeal {
 
     const { minSpins, staggerMs, speedPxS, durationMs } = this.getSpinConfig(config);
     const useSpeed = speedPxS > 0;
+    const stopSpringOvershootPx = this.getStopSpringOvershootPx();
+    const stopSpringSettleMs = Math.max(0, STOP_SPRING_SETTLE_MS);
+    const stopSpringEnabled = stopSpringSettleMs > 0 && stopSpringOvershootPx > 0;
 
     const startOffsets = new Array(this.reels);
     const deltas = new Array(this.reels);
     const durations = new Array(this.reels);
+    const settleDurationMs = new Array(this.reels);
+    const targets = new Array(this.reels);
 
     for (let r = 0; r < this.reels; r += 1) {
       const idx = clampInt(stopAtSegments[r] ?? 0, 0, this.opts.slotCount - 1);
@@ -241,20 +270,36 @@ export class ReelDeal {
       }
 
       startOffsets[r] = this.offsets[r];
-      deltas[r] = delta;
+      targets[r] = this.offsets[r] + delta;
+
+      let finalDelta = delta;
+      let settleDuration = 0;
+
+      if (stopSpringEnabled && delta !== 0 && stopSpringOvershootPx > 0) {
+        const direction = Math.sign(delta);
+        const overshoot = direction * stopSpringOvershootPx;
+
+        finalDelta += overshoot;
+        settleDuration = stopSpringSettleMs;
+      }
+
+      deltas[r] = finalDelta;
+      settleDurationMs[r] = settleDuration;
 
       if (useSpeed) {
-        durations[r] = Math.max(0, Math.round((Math.abs(delta) / speedPxS) * 1000));
+        durations[r] = Math.max(0, Math.round((Math.abs(finalDelta) / speedPxS) * 1000));
       } else {
         durations[r] = Math.max(0, durationMs + staggerMs * r);
       }
     }
 
     const totalDelta = deltas.reduce((acc, v) => acc + Math.abs(v), 0);
+    const allSpinZero = durations.every((entry) => entry <= 0);
+    const allSettleZero = settleDurationMs.every((entry) => entry <= 0);
 
-    if (totalDelta === 0 || durations.every((entry) => entry <= 0)) {
+    if (totalDelta === 0 || (allSpinZero && allSettleZero)) {
       for (let r = 0; r < this.reels; r += 1) {
-        this.offsets[r] = this.offsets[r] + deltas[r];
+        this.offsets[r] = targets[r];
       }
 
       this.anim = null;
@@ -266,7 +311,14 @@ export class ReelDeal {
 
     const startTime = performance.now();
 
-    this.anim = { startTime, startOffsets, deltas, durationMs: durations };
+    this.anim = {
+      startTime,
+      startOffsets,
+      deltas,
+      durationMs: durations,
+      settleDurationMs,
+      targets,
+    };
     this.idleStartTime = null;
     this.startLoop();
 
@@ -279,6 +331,22 @@ export class ReelDeal {
     if (!overrides) return this.spinConfig;
 
     return normalizeSpinConfig({ ...this.spinConfig, ...overrides });
+  }
+
+  private getStopSpringOvershootPx(): number {
+    const cap = this.frameHeight * STOP_SPRING_MAX_RATIO;
+    const overshoot = Math.max(0, STOP_SPRING_OVERSHOOT_PX);
+
+    return Math.min(overshoot, cap);
+  }
+
+  private getStopSpringOffset(overshoot: number, t: number): number {
+    if (overshoot === 0) return 0;
+
+    const decay = Math.exp(-STOP_SPRING_DAMPING * t);
+    const angle = Math.PI * 2 * STOP_SPRING_OSCILLATIONS * t;
+
+    return overshoot * decay * Math.cos(angle);
   }
 
   async spinQueue(spins: ReelDealSpinState[]): Promise<void> {
@@ -414,31 +482,48 @@ export class ReelDeal {
 
   private loop = (now: number): void => {
     if (this.anim) {
-      const { startTime, durationMs, startOffsets, deltas } = this.anim;
+      const { startTime, durationMs, startOffsets, deltas, settleDurationMs, targets } = this.anim;
+      const elapsed = now - startTime;
 
       let allDone = true;
 
       for (let r = 0; r < this.reels; r += 1) {
         const duration = durationMs[r] ?? 0;
-        const t = duration <= 0 ? 1 : Math.min(1, (now - startTime) / duration);
-        const eased = reelProgress(t);
+        const settleDuration = settleDurationMs[r] ?? 0;
+        const targetOffset = targets[r] ?? startOffsets[r] + deltas[r];
 
-        if (t < 1) allDone = false;
+        if (duration > 0 && elapsed < duration) {
+          const t = Math.min(1, elapsed / duration);
+          const eased = reelProgress(t);
 
-        const baseOffset = startOffsets[r] + deltas[r] * eased;
+          if (t < 1) allDone = false;
 
-        let tick = 0;
+          const baseOffset = startOffsets[r] + deltas[r] * eased;
 
-        if (t > SPIN_TICK_START && this.frameHeight > 0) {
-          const u = clamp01((t - SPIN_TICK_START) / SPIN_TICK_RANGE);
-          const env = (1 - u) ** 2;
-          const phase = (baseOffset / this.frameHeight) * Math.PI * 2;
-          const amp = Math.min(SPIN_TICK_MAX_PX, this.frameHeight * 0.06);
+          let tick = 0;
 
-          tick = Math.sin(phase) * env * amp;
+          if (t > SPIN_TICK_START && this.frameHeight > 0) {
+            const u = clamp01((t - SPIN_TICK_START) / SPIN_TICK_RANGE);
+            const env = (1 - u) ** 2;
+            const phase = (baseOffset / this.frameHeight) * Math.PI * 2;
+            const amp = Math.min(SPIN_TICK_MAX_PX, this.frameHeight * 0.06);
+
+            tick = Math.sin(phase) * env * amp;
+          }
+
+          this.offsets[r] = baseOffset + tick;
+        } else if (settleDuration > 0) {
+          const t = duration <= 0 ? elapsed / settleDuration : (elapsed - duration) / settleDuration;
+          const u = clamp01(t);
+          const overshoot = startOffsets[r] + deltas[r] - targetOffset;
+          const spring = this.getStopSpringOffset(overshoot, u);
+
+          if (u < 1) allDone = false;
+
+          this.offsets[r] = targetOffset + spring;
+        } else {
+          this.offsets[r] = targetOffset;
         }
-
-        this.offsets[r] = baseOffset + tick;
       }
 
       this.updateVelocity(now);
@@ -446,7 +531,9 @@ export class ReelDeal {
 
       if (allDone) {
         for (let r = 0; r < this.reels; r += 1) {
-          this.offsets[r] = this.anim.startOffsets[r] + this.anim.deltas[r];
+          const targetOffset = this.anim.targets[r] ?? this.anim.startOffsets[r] + this.anim.deltas[r];
+
+          this.offsets[r] = targetOffset;
           this.idleBaseOffsets[r] = this.offsets[r];
         }
 
@@ -580,22 +667,13 @@ export class ReelDeal {
     if (!this.idleBob) return;
     if (this.idleStartTime === null) this.idleStartTime = now;
 
-    const { amplitudePx, speedHz, phaseOffsetRad, delayMs, rampMs } = this.idleBob;
+    const { amplitudePx, speedHz, phaseOffsetRad, rampMs } = this.idleBob;
     const elapsedMs = now - this.idleStartTime;
 
-    if (elapsedMs < Math.max(0, delayMs)) {
-      for (let r = 0; r < this.reels; r += 1) {
-        this.offsets[r] = this.idleBaseOffsets[r];
-        this.velocities[r] = 0;
-      }
-
-      return;
-    }
-
-    const tSec = (elapsedMs - Math.max(0, delayMs)) / 1000;
+    const tSec = elapsedMs / 1000;
     const rampT = Math.max(
       0,
-      Math.min(1, (elapsedMs - Math.max(0, delayMs)) / Math.max(1, rampMs)),
+      Math.min(1, elapsedMs / Math.max(1, rampMs)),
     );
     const ramp = rampHermite(rampT);
     const omega = speedHz * Math.PI * 2;
@@ -792,6 +870,8 @@ export class ReelDeal {
       uniform float u_warpAngle;
       uniform float u_blurPx;
 
+      const float HALF_PI = 1.5707963;
+
       float saturate(float x) { return clamp(x, 0.0, 1.0); }
 
       void main() {
@@ -800,7 +880,6 @@ export class ReelDeal {
         }
 
         float localX = (v_uv.x - u_reelX) / u_reelW;
-        // v_uv.y is authored as 0 at TOP, 1 at BOTTOM (Canvas-like).
         float localY = v_uv.y;
         float hs = max(0.0001, u_heightScale);
         float fullY = localY * hs + (1.0 - hs) * 0.5;
@@ -811,32 +890,23 @@ export class ReelDeal {
         float centerBand = 1.0 / 3.0;
         float halfBand = centerBand * 0.5;
         float dist = abs(fullY - center);
-        // Smoother transition: avoid a hard boundary at halfBand.
         float edgeWeight = smoothstep(halfBand, 0.5, dist);
         float edgePow = max(0.5, u_edgePower);
         edgeWeight = pow(edgeWeight, edgePow) * warpStrength;
-        float tEase = smoothstep(0.0, 1.0, fullY);
-        float warpedY = mix(fullY, tEase, edgeWeight);
-        float y = (warpedY - 0.5) * 2.0;
-        float theta = y * warp;
-        float edgeWarp = edgeWeight;
+        float yCentered = (fullY - 0.5) * 2.0;
+        float sinY = 0.5 + 0.5 * sin(yCentered * HALF_PI);
+        float warpedY = mix(fullY, sinY, edgeWeight);
 
         float yPx = u_offsetPx + warpedY * (u_frameHeight * u_visibleSlots);
-        // With UNPACK_FLIP_Y_WEBGL=0 and Canvas-like UVs (v=0 at TOP),
-        // v=0 samples the TOP of the original image, so pixel Y-from-top maps directly to v.
-        // Normalize early to improve precision on mobile GPUs.
         float v = fract((u_offsetPx / u_spriteHeight) +
                         warpedY * ((u_frameHeight * u_visibleSlots) / u_spriteHeight));
 
         vec4 base = texture2D(u_tex, vec2(localX, v));
 
         if (u_blurPx > 0.0) {
-          // Clamp blur step to reduce banding on mobile GPUs.
-          // Scale max step with speed proxy (u_blurPx).
           float maxStepPx = 1.0 + 3.0 * saturate(u_blurPx / 4.0);
           float blurPx = min(u_blurPx, maxStepPx);
           float blurStep = blurPx / max(1.0, u_spriteHeight);
-          // 9-tap gaussian-ish blur to reduce banding on mobile.
           vec4 sum = base * 0.227027;
           sum += texture2D(u_tex, vec2(localX, fract(v + blurStep))) * 0.1945946;
           sum += texture2D(u_tex, vec2(localX, fract(v - blurStep))) * 0.1945946;

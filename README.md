@@ -114,7 +114,6 @@ onBeforeUnmount(() => {
 | `queuedSpinStates` | `ReelDealSpinState[]`               |           —           | Optional queue of predefined spins.                              |
 | `spinConfig`       | `Partial<ReelDealSpinConfig>`       |  `defaultSpinConfig`  | Default spin config (minSpins, durationMs, speedPxS, staggerMs). |
 | `spinBlur`         | `Partial<ReelDealSpinBlur>`         |   `defaultSpinBlur`   | Motion blur settings.                                            |
-| `webglShading`     | `Partial<ReelDealWebGLShading>`     | `defaultWebGLShading` | Warp and edge shading.                                           |
 | `idleBob`          | `Partial<ReelDealIdleBob> \| false` |   `defaultIdleBob`    | Idle bobbing animation (set `false` to disable).                 |
 | `maxDpr`           | `number`                            |          `2`          | Max device pixel ratio.                                          |
 <br>

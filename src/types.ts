@@ -9,13 +9,7 @@ export type ReelDealSpriteSource = string | HTMLImageElement;
 
 export interface ReelDealSpinState {
   stopAtSegments: number[];
-
   callback?: (spinIndex: number, stopAtSegments: number[]) => void;
-}
-
-export interface ReelDealWebGLShading {
-  warpAngleDeg: number;
-  edgePower: number;
 }
 
 export interface ReelDealSpinBlur {
@@ -27,7 +21,6 @@ export interface ReelDealIdleBob {
   amplitudePx: number;
   speedHz: number;
   phaseOffsetRad: number;
-  delayMs: number;
   rampMs: number;
 }
 
@@ -42,7 +35,6 @@ export interface ReelDealOptions {
   reels?: number;
   spinConfig?: Partial<ReelDealSpinConfig>;
   spinBlur?: Partial<ReelDealSpinBlur>;
-  webglShading?: Partial<ReelDealWebGLShading>;
   idleBob?: Partial<ReelDealIdleBob> | false;
   maxDpr?: number;
 }

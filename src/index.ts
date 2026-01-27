@@ -2,7 +2,6 @@ export {
   defaultIdleBob,
   defaultSpinBlur,
   defaultSpinConfig,
-  defaultWebGLShading,
 } from './defaults';
 export { ReelDeal } from './ReelDeal';
 export type {
@@ -12,5 +11,4 @@ export type {
   ReelDealSpinConfig,
   ReelDealSpinState,
   ReelDealSpriteSource,
-  ReelDealWebGLShading,
 } from './types';

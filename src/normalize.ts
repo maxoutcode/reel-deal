@@ -1,15 +1,5 @@
-import {
-  defaultIdleBob,
-  defaultSpinBlur,
-  defaultSpinConfig,
-  defaultWebGLShading,
-} from './defaults';
-import type {
-  ReelDealIdleBob,
-  ReelDealSpinBlur,
-  ReelDealSpinConfig,
-  ReelDealWebGLShading,
-} from './types';
+import { defaultIdleBob, defaultSpinBlur, defaultSpinConfig } from './defaults';
+import type { ReelDealIdleBob, ReelDealSpinBlur, ReelDealSpinConfig } from './types';
 import { finiteOr, nonNegative, nonNegativeInt } from './utils/math';
 
 const DEFAULT_MAX_DPR = 2;
@@ -38,17 +28,6 @@ export const normalizeSpinBlur = (overrides?: Partial<ReelDealSpinBlur>): ReelDe
   };
 };
 
-export const normalizeWebGLShading = (
-  overrides?: Partial<ReelDealWebGLShading>,
-): ReelDealWebGLShading => {
-  const base = { ...defaultWebGLShading, ...(overrides ?? {}) };
-
-  return {
-    warpAngleDeg: nonNegative(base.warpAngleDeg, defaultWebGLShading.warpAngleDeg),
-    edgePower: nonNegative(base.edgePower, defaultWebGLShading.edgePower),
-  };
-};
-
 export const normalizeIdleBob = (
   overrides?: Partial<ReelDealIdleBob> | false,
 ): ReelDealIdleBob | null => {
@@ -60,7 +39,6 @@ export const normalizeIdleBob = (
     amplitudePx: nonNegative(base.amplitudePx, defaultIdleBob.amplitudePx),
     speedHz: nonNegative(base.speedHz, defaultIdleBob.speedHz),
     phaseOffsetRad: finiteOr(base.phaseOffsetRad, defaultIdleBob.phaseOffsetRad),
-    delayMs: nonNegativeInt(base.delayMs, defaultIdleBob.delayMs),
     rampMs: nonNegativeInt(base.rampMs, defaultIdleBob.rampMs),
   };
 };
