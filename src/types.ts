@@ -24,6 +24,11 @@ export interface ReelDealIdleBob {
   rampMs: number;
 }
 
+export interface ReelDealWebGLShading {
+  warpAngleDeg: number;
+  edgePower: number;
+}
+
 export interface ReelDealOptions {
   canvas: HTMLCanvasElement | string;
   container: HTMLElement | string;
@@ -35,6 +40,7 @@ export interface ReelDealOptions {
   reels?: number;
   spinConfig?: Partial<ReelDealSpinConfig>;
   spinBlur?: Partial<ReelDealSpinBlur>;
+  webglShading?: Partial<ReelDealWebGLShading>;
   idleBob?: Partial<ReelDealIdleBob> | false;
   maxDpr?: number;
 }

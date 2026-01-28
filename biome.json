@@ -28,7 +28,6 @@
     }
   },
   "javascript": {
-    "globals": ["geoip2"],
     "formatter": {
       "quoteStyle": "single",
       "semicolons": "always",

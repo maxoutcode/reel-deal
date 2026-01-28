@@ -4,7 +4,7 @@ import { finiteOr, nonNegative, nonNegativeInt } from './utils/math';
 
 const DEFAULT_MAX_DPR = 2;
 
-export type NormalizedSpinConfig = Required<ReelDealSpinConfig>;
+type NormalizedSpinConfig = Required<ReelDealSpinConfig>;
 
 export const normalizeSpinConfig = (
   overrides?: Partial<ReelDealSpinConfig>,

@@ -1,4 +1,4 @@
-export const resolveElementById = <T extends HTMLElement>(id: string, kind: string): T => {
+const resolveElementById = <T extends HTMLElement>(id: string, kind: string): T => {
   const el = document.getElementById(id);
 
   if (!el) {

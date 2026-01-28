@@ -11,4 +11,5 @@ export type {
   ReelDealSpinConfig,
   ReelDealSpinState,
   ReelDealSpriteSource,
+  ReelDealWebGLShading,
 } from './types';

@@ -1,8 +1,4 @@
-import type {
-  ReelDealIdleBob,
-  ReelDealSpinBlur,
-  ReelDealSpinConfig,
-} from './types';
+import type { ReelDealIdleBob, ReelDealSpinBlur, ReelDealSpinConfig } from './types';
 
 export const defaultSpinConfig: ReelDealSpinConfig = {
   minSpins: 2,

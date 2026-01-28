@@ -1,5 +1,4 @@
 import {
-  type NormalizedSpinConfig,
   normalizeIdleBob,
   normalizeMaxDpr,
   normalizeSpinBlur,
@@ -11,6 +10,7 @@ import type {
   ReelDealSpinBlur,
   ReelDealSpinConfig,
   ReelDealSpinState,
+  ReelDealWebGLShading,
 } from './types';
 import { resolveElement } from './utils/dom';
 import { clamp01, clampInt, mod, nonNegative, rampHermite, reelProgress } from './utils/math';
@@ -21,25 +21,20 @@ const SPIN_TICK_RANGE = 0.28;
 const SPIN_TICK_MAX_PX = 7;
 const VELOCITY_DECAY = 0.85;
 const VELOCITY_GAIN = 1 - VELOCITY_DECAY;
-const STOP_SPRING_OVERSHOOT_PX = 30;
-const STOP_SPRING_SETTLE_MS = 500;
+const STOP_SPRING_OVERSHOOT_PX = 55;
+const STOP_SPRING_SETTLE_MS = 300;
 const STOP_SPRING_OSCILLATIONS = 1.25;
-const STOP_SPRING_DAMPING = 4;
-const STOP_SPRING_MAX_RATIO = 0.25;
+const STOP_SPRING_DAMPING = 5;
+const STOP_SPRING_MAX_RATIO = 0.35;
 
-type WebGLShadingConfig = {
-  warpAngleDeg: number;
-  edgePower: number;
-};
+type WebGLShadingConfig = ReelDealWebGLShading;
 
 const DEFAULT_WEBGL_SHADING: WebGLShadingConfig = {
-  warpAngleDeg: 360,
-  edgePower: 0.5,
+  warpAngleDeg: 60,
+  edgePower: 4.8,
 };
 
-const normalizeWebGLShading = (
-  overrides?: Partial<WebGLShadingConfig>,
-): WebGLShadingConfig => ({
+const normalizeWebGLShading = (overrides?: Partial<WebGLShadingConfig>): WebGLShadingConfig => ({
   warpAngleDeg: nonNegative(overrides?.warpAngleDeg, DEFAULT_WEBGL_SHADING.warpAngleDeg),
   edgePower: nonNegative(overrides?.edgePower, DEFAULT_WEBGL_SHADING.edgePower),
 });
@@ -62,7 +57,7 @@ export class ReelDeal {
   private readonly heightScale = 2 / 3;
   private readonly centerIndex = 1;
   private readonly reels: number;
-  private readonly spinConfig: NormalizedSpinConfig;
+  private readonly spinConfig: ReturnType<typeof normalizeSpinConfig>;
   private readonly spinBlur: ReelDealSpinBlur;
   private readonly webglShading: WebGLShadingConfig;
   private readonly idleBob: ReelDealIdleBob | null;
@@ -77,12 +72,12 @@ export class ReelDeal {
   private height = 0;
   private dpr = 1;
 
-  private offsets: number[];
-  private velocities: number[];
+  private readonly offsets: number[];
+  private readonly velocities: number[];
   private lastVelT: number | null = null;
-  private lastVelOffsets: number[];
+  private readonly lastVelOffsets: number[];
   private idleStartTime: number | null = null;
-  private idleBaseOffsets: number[];
+  private readonly idleBaseOffsets: number[];
 
   private gl: WebGLRenderingContext | WebGL2RenderingContext | null = null;
   private glProgram: WebGLProgram | null = null;
@@ -121,9 +116,7 @@ export class ReelDeal {
     this.reels = clampInt(options.reels ?? 1, 1, MAX_REELS);
     this.spinConfig = normalizeSpinConfig(options.spinConfig);
     this.spinBlur = normalizeSpinBlur(options.spinBlur);
-    this.webglShading = normalizeWebGLShading(
-      (options as { webglShading?: Partial<WebGLShadingConfig> }).webglShading,
-    );
+    this.webglShading = normalizeWebGLShading(options.webglShading);
     this.idleBob = normalizeIdleBob(options.idleBob);
     this.maxDpr = normalizeMaxDpr(options.maxDpr);
 
@@ -156,6 +149,7 @@ export class ReelDeal {
 
     this.button = this.resolveButton();
     this.queuedSpins = this.resolveSpinQueue();
+
     this.attachButtonHandler();
 
     this.render();
@@ -320,6 +314,7 @@ export class ReelDeal {
       targets,
     };
     this.idleStartTime = null;
+
     this.startLoop();
 
     return new Promise((resolve) => {
@@ -327,7 +322,9 @@ export class ReelDeal {
     });
   }
 
-  private getSpinConfig(overrides?: Partial<ReelDealSpinConfig>): NormalizedSpinConfig {
+  private getSpinConfig(
+    overrides?: Partial<ReelDealSpinConfig>,
+  ): ReturnType<typeof normalizeSpinConfig> {
     if (!overrides) return this.spinConfig;
 
     return normalizeSpinConfig({ ...this.spinConfig, ...overrides });
@@ -513,7 +510,8 @@ export class ReelDeal {
 
           this.offsets[r] = baseOffset + tick;
         } else if (settleDuration > 0) {
-          const t = duration <= 0 ? elapsed / settleDuration : (elapsed - duration) / settleDuration;
+          const t =
+            duration <= 0 ? elapsed / settleDuration : (elapsed - duration) / settleDuration;
           const u = clamp01(t);
           const overshoot = startOffsets[r] + deltas[r] - targetOffset;
           const spring = this.getStopSpringOffset(overshoot, u);
@@ -531,7 +529,8 @@ export class ReelDeal {
 
       if (allDone) {
         for (let r = 0; r < this.reels; r += 1) {
-          const targetOffset = this.anim.targets[r] ?? this.anim.startOffsets[r] + this.anim.deltas[r];
+          const targetOffset =
+            this.anim.targets[r] ?? this.anim.startOffsets[r] + this.anim.deltas[r];
 
           this.offsets[r] = targetOffset;
           this.idleBaseOffsets[r] = this.offsets[r];
@@ -671,10 +670,7 @@ export class ReelDeal {
     const elapsedMs = now - this.idleStartTime;
 
     const tSec = elapsedMs / 1000;
-    const rampT = Math.max(
-      0,
-      Math.min(1, elapsedMs / Math.max(1, rampMs)),
-    );
+    const rampT = Math.max(0, Math.min(1, elapsedMs / Math.max(1, rampMs)));
     const ramp = rampHermite(rampT);
     const omega = speedHz * Math.PI * 2;
 
@@ -774,8 +770,7 @@ export class ReelDeal {
   }
 
   private applyViewportCrop(): void {
-    this.canvas.style.width = '100%';
-    this.canvas.style.height = '100%';
+    this.ensureCanvasCoversContainer();
     this.canvas.style.transform = '';
   }
 
@@ -885,17 +880,17 @@ export class ReelDeal {
         float fullY = localY * hs + (1.0 - hs) * 0.5;
 
         float warp = max(0.0, u_warpAngle);
-        float warpStrength = saturate(warp / 1.2);
-        float center = 0.5;
-        float centerBand = 1.0 / 3.0;
-        float halfBand = centerBand * 0.5;
-        float dist = abs(fullY - center);
-        float edgeWeight = smoothstep(halfBand, 0.5, dist);
+        float warpStrength = saturate(warp / HALF_PI);
+        float distNorm = abs(fullY - 0.5) * 2.0;
         float edgePow = max(0.5, u_edgePower);
-        edgeWeight = pow(edgeWeight, edgePow) * warpStrength;
-        float yCentered = (fullY - 0.5) * 2.0;
-        float sinY = 0.5 + 0.5 * sin(yCentered * HALF_PI);
-        float warpedY = mix(fullY, sinY, edgeWeight);
+        float edgeWeight = pow(saturate(distNorm), edgePow) * warpStrength;
+
+        float stretchMax = 6.0;
+        float stretch = mix(1.0, stretchMax, edgeWeight);
+        float warpedY = 0.5 + (fullY - 0.5) * stretch;
+
+        float arcY = 0.5 + 0.5 * sin((warpedY - 0.5) * HALF_PI);
+        warpedY = mix(warpedY, arcY, 0.2);
 
         float yPx = u_offsetPx + warpedY * (u_frameHeight * u_visibleSlots);
         float v = fract((u_offsetPx / u_spriteHeight) +

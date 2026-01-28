@@ -17,7 +17,7 @@
       }
 
       #reelWrap {
-        width: clamp(160px, 90vw, 660px);
+        width: min(100% - 30px, 800px);
       }
 
       canvas {
@@ -62,7 +62,7 @@
         canvas,
         container,
         button,
-        sprite: new URL('./demo/assets/test.webp', import.meta.url).href,
+        sprite: new URL('./demo/assets/reel.webp', import.meta.url).href,
         slotCount: 8,
         reels: 3,
         spinConfig: {
@@ -71,7 +71,7 @@
           speedPxS: 4000,
           staggerMs: 400,
         },
-        initialSegments: [3, 2, 0],
+        initialSegments: [1, 2, 3],
         queuedSpinStates: [
           {
             stopAtSegments: [1, 1, 0],
