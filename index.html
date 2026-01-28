@@ -18,6 +18,7 @@
 
       #reelWrap {
         width: min(100% - 30px, 800px);
+        background: #fafafa;
       }
 
       canvas {
@@ -62,14 +63,18 @@
         canvas,
         container,
         button,
-        sprite: new URL('./demo/assets/reel.webp', import.meta.url).href,
-        slotCount: 8,
+        sprite: new URL('./demo/assets/reel.svg', import.meta.url).href,
+        slotCount: 6,
         reels: 3,
         spinConfig: {
           minSpins: 2,
           durationMs: 2500,
           speedPxS: 4000,
           staggerMs: 400,
+        },
+        finalSpinLine: {
+          thickness: 12,
+          intensity: 0.75,
         },
         initialSegments: [1, 2, 3],
         queuedSpinStates: [
@@ -80,13 +85,7 @@
             },
           },
           {
-            stopAtSegments: [0, 1, 2],
-            callback: () => {
-              console.log('[ReelDeal] spin complete');
-            },
-          },
-          {
-            stopAtSegments: [7, 7, 7],
+            stopAtSegments: [3, 3, 3],
             callback: () => {
               console.log('[ReelDeal] spin complete');
             },

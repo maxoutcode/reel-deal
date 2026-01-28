@@ -1,6 +1,18 @@
-import { defaultIdleBob, defaultSpinBlur, defaultSpinConfig } from './defaults';
-import type { ReelDealIdleBob, ReelDealSpinBlur, ReelDealSpinConfig } from './types';
-import { finiteOr, nonNegative, nonNegativeInt } from './utils/math';
+import {
+  defaultFinalSpinLine,
+  defaultIdleBob,
+  defaultSpinBlur,
+  defaultSpinConfig,
+  defaultWebglShading,
+} from './defaults';
+import type {
+  ReelDealFinalSpinLine,
+  ReelDealIdleBob,
+  ReelDealSpinBlur,
+  ReelDealSpinConfig,
+  ReelDealWebGLShading,
+} from './types';
+import { clamp01, finiteOr, nonNegative, nonNegativeInt } from './utils/math';
 
 const DEFAULT_MAX_DPR = 2;
 
@@ -12,7 +24,7 @@ export const normalizeSpinConfig = (
   const base = { ...defaultSpinConfig, ...(overrides ?? {}) };
 
   return {
-    minSpins: nonNegativeInt(base.minSpins, defaultSpinConfig.minSpins),
+    minSpins: nonNegativeInt(base.minSpins, defaultSpinConfig.minSpins ?? 0),
     durationMs: nonNegativeInt(base.durationMs, defaultSpinConfig.durationMs ?? 0),
     speedPxS: nonNegativeInt(base.speedPxS, defaultSpinConfig.speedPxS ?? 0),
     staggerMs: nonNegativeInt(base.staggerMs, defaultSpinConfig.staggerMs ?? 0),
@@ -45,3 +57,22 @@ export const normalizeIdleBob = (
 
 export const normalizeMaxDpr = (value?: number): number =>
   Math.max(1, finiteOr(value, DEFAULT_MAX_DPR));
+
+export const normalizeWebGLShading = (
+  overrides?: Partial<ReelDealWebGLShading>,
+): ReelDealWebGLShading => ({
+  warpAngleDeg: nonNegative(overrides?.warpAngleDeg, defaultWebglShading.warpAngleDeg),
+  edgePower: nonNegative(overrides?.edgePower, defaultWebglShading.edgePower),
+});
+
+export const normalizeFinalSpinLine = (
+  overrides?: Partial<ReelDealFinalSpinLine> | false,
+): ReelDealFinalSpinLine | null => {
+  if (overrides === false) return null;
+  if (!overrides) return null;
+
+  return {
+    thickness: nonNegative(overrides.thickness, defaultFinalSpinLine.thickness),
+    intensity: clamp01(overrides.intensity ?? defaultFinalSpinLine.intensity),
+  };
+};

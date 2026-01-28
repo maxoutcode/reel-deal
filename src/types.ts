@@ -1,6 +1,6 @@
 export interface ReelDealSpinConfig {
   durationMs?: number;
-  minSpins: number;
+  minSpins?: number;
   speedPxS?: number;
   staggerMs?: number;
 }
@@ -10,6 +10,13 @@ export type ReelDealSpriteSource = string | HTMLImageElement;
 export interface ReelDealSpinState {
   stopAtSegments: number[];
   callback?: (spinIndex: number, stopAtSegments: number[]) => void;
+}
+
+export interface ReelDealSpinRequest {
+  stopAtSegments: number[];
+  config?: Partial<ReelDealSpinConfig>;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface ReelDealSpinBlur {
@@ -29,11 +36,16 @@ export interface ReelDealWebGLShading {
   edgePower: number;
 }
 
+export interface ReelDealFinalSpinLine {
+  thickness: number;
+  intensity: number;
+}
+
 export interface ReelDealOptions {
-  canvas: HTMLCanvasElement | string;
-  container: HTMLElement | string;
-  sprite: ReelDealSpriteSource;
-  slotCount: number;
+  canvas?: HTMLCanvasElement | string;
+  container?: HTMLElement | string;
+  sprite?: ReelDealSpriteSource;
+  slotCount?: number;
   initialSegments?: number[];
   button?: HTMLButtonElement | string;
   queuedSpinStates?: ReelDealSpinState[];
@@ -43,4 +55,5 @@ export interface ReelDealOptions {
   webglShading?: Partial<ReelDealWebGLShading>;
   idleBob?: Partial<ReelDealIdleBob> | false;
   maxDpr?: number;
+  finalSpinLine?: Partial<ReelDealFinalSpinLine> | false;
 }

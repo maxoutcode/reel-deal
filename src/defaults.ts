@@ -18,3 +18,13 @@ export const defaultIdleBob: ReelDealIdleBob = {
   phaseOffsetRad: 0.9,
   rampMs: 800,
 };
+
+export const defaultWebglShading = {
+  warpAngleDeg: 60,
+  edgePower: 4.8,
+} as const;
+
+export const defaultFinalSpinLine = {
+  thickness: 6,
+  intensity: 1.0,
+} as const;

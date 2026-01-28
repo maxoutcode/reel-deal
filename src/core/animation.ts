@@ -1,0 +1,203 @@
+import type { ReelDealIdleBob, ReelDealSpinConfig } from '../types';
+import { clampInt, mod } from '../utils/math';
+
+type NumericArray = number[] | Float32Array | Int32Array | Uint32Array;
+
+export type SpinPlan = {
+  startOffsets: number[];
+  deltas: number[];
+  durations: number[];
+  settleDurationMs: number[];
+  targets: number[];
+  totalDelta: number;
+  allSpinZero: boolean;
+  allSettleZero: boolean;
+};
+
+export type SpinPlanInput = {
+  stopAtSegments: NumericArray;
+  currentOffsets: NumericArray;
+  reels: number;
+  frameHeight: number;
+  spriteHeight: number;
+  centerIndex: number;
+  slotCount: number;
+  spinConfig: Required<ReelDealSpinConfig>;
+  stopSpringOvershootPx: number;
+  stopSpringSettleMs: number;
+  useSpeed: boolean;
+};
+
+export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
+  const {
+    stopAtSegments,
+    currentOffsets,
+    reels,
+    frameHeight,
+    spriteHeight,
+    centerIndex,
+    slotCount,
+    spinConfig,
+    stopSpringOvershootPx,
+    stopSpringSettleMs,
+    useSpeed,
+  } = input;
+
+  const startOffsets = new Array(reels);
+  const deltas = new Array(reels);
+  const durations = new Array(reels);
+  const settleDurationMs = new Array(reels);
+  const targets = new Array(reels);
+
+  const { minSpins, staggerMs, speedPxS, durationMs } = spinConfig;
+  const stopSpringEnabled = stopSpringSettleMs > 0 && stopSpringOvershootPx > 0;
+
+  for (let r = 0; r < reels; r += 1) {
+    const idx = clampInt(stopAtSegments[r] ?? 0, 0, slotCount - 1);
+    const desiredTop = idx * frameHeight - centerIndex * frameHeight;
+    const desired = mod(desiredTop, spriteHeight);
+    const current = mod(currentOffsets[r], spriteHeight);
+
+    const alignDelta = mod(current - desired, spriteHeight);
+
+    let delta = -(minSpins * spriteHeight + alignDelta);
+
+    if (useSpeed && durationMs > 0) {
+      const desiredDistance = (speedPxS * durationMs) / 1000;
+      const loops = Math.max(
+        minSpins,
+        Math.ceil(Math.max(0, desiredDistance - alignDelta) / spriteHeight),
+      );
+
+      delta = -(alignDelta + loops * spriteHeight);
+    }
+
+    if (staggerMs > 0 && useSpeed) {
+      const extraDelta = (speedPxS * staggerMs * r) / 1000;
+      const extraLoops = Math.ceil(extraDelta / spriteHeight);
+
+      delta -= extraLoops * spriteHeight;
+    }
+
+    startOffsets[r] = currentOffsets[r];
+    targets[r] = currentOffsets[r] + delta;
+
+    let finalDelta = delta;
+    let settleDuration = 0;
+
+    if (stopSpringEnabled && delta !== 0 && stopSpringOvershootPx > 0) {
+      const direction = Math.sign(delta);
+      const overshoot = direction * stopSpringOvershootPx;
+
+      finalDelta += overshoot;
+      settleDuration = stopSpringSettleMs;
+    }
+
+    deltas[r] = finalDelta;
+    settleDurationMs[r] = settleDuration;
+
+    if (useSpeed) {
+      durations[r] = Math.max(0, Math.round((Math.abs(finalDelta) / speedPxS) * 1000));
+    } else {
+      durations[r] = Math.max(0, durationMs + staggerMs * r);
+    }
+  }
+
+  const totalDelta = deltas.reduce((acc, v) => acc + Math.abs(v), 0);
+  const allSpinZero = durations.every((entry) => entry <= 0);
+  const allSettleZero = settleDurationMs.every((entry) => entry <= 0);
+
+  return {
+    startOffsets,
+    deltas,
+    durations,
+    settleDurationMs,
+    targets,
+    totalDelta,
+    allSpinZero,
+    allSettleZero,
+  };
+};
+
+export const getStopSpringOffset = (overshoot: number, t: number): number => {
+  if (overshoot === 0) return 0;
+
+  const decay = Math.exp(-5 * t);
+  const angle = Math.PI * 2 * 1.25 * t;
+
+  return overshoot * decay * Math.cos(angle);
+};
+
+export type VelocityState = {
+  lastVelT: number | null;
+  lastVelOffsets: NumericArray;
+  velocities: NumericArray;
+};
+
+export const updateVelocities = (
+  now: number,
+  state: VelocityState,
+  offsets: NumericArray,
+): number | null => {
+  if (state.lastVelT === null) {
+    state.lastVelT = now;
+
+    for (let r = 0; r < offsets.length; r += 1) {
+      state.lastVelOffsets[r] = offsets[r];
+      state.velocities[r] = 0;
+    }
+
+    return state.lastVelT;
+  }
+
+  const dt = (now - state.lastVelT) / 1000;
+
+  if (dt <= 0) return state.lastVelT;
+
+  const VELOCITY_DECAY = 0.85;
+  const VELOCITY_GAIN = 1 - VELOCITY_DECAY;
+
+  for (let r = 0; r < offsets.length; r += 1) {
+    const v = (offsets[r] - state.lastVelOffsets[r]) / dt;
+
+    state.velocities[r] = state.velocities[r] * VELOCITY_DECAY + v * VELOCITY_GAIN;
+    state.lastVelOffsets[r] = offsets[r];
+  }
+
+  state.lastVelT = now;
+
+  return state.lastVelT;
+};
+
+export type IdleState = {
+  idleStartTime: number | null;
+  idleBaseOffsets: NumericArray;
+  velocities: NumericArray;
+};
+
+export const updateIdleOffsets = (
+  now: number,
+  idleState: IdleState,
+  idleBob: ReelDealIdleBob,
+  offsets: NumericArray,
+  reels: number,
+): number | null => {
+  if (idleState.idleStartTime === null) idleState.idleStartTime = now;
+
+  const { amplitudePx, speedHz, phaseOffsetRad, rampMs } = idleBob;
+  const elapsedMs = now - idleState.idleStartTime;
+
+  const tSec = elapsedMs / 1000;
+  const rampT = Math.max(0, Math.min(1, elapsedMs / Math.max(1, rampMs)));
+  const ramp = Math.min(1, Math.max(0, rampT * rampT * (2 - rampT)));
+  const omega = speedHz * Math.PI * 2;
+
+  for (let r = 0; r < reels; r += 1) {
+    const phase = tSec * omega + r * phaseOffsetRad;
+
+    offsets[r] = idleState.idleBaseOffsets[r] + Math.sin(phase) * (amplitudePx * ramp);
+    idleState.velocities[r] = 0;
+  }
+
+  return idleState.idleStartTime;
+};

@@ -17,5 +17,24 @@
     "declaration": true,
     "declarationMap": true
   },
-  "include": ["src", "vite-env.d.ts", "vite.config.ts"]
+  "files": [
+    "src/ReelDeal.ts",
+    "src/defaults.ts",
+    "src/index.ts",
+    "src/normalize.ts",
+    "src/types.ts",
+    "src/utils/dom.ts",
+    "src/utils/math.ts",
+    "src/assets/spriteLoader.ts",
+    "src/core/loop.ts",
+    "src/render/webglRenderer.ts",
+    "src/render/lineRenderer.ts",
+    "src/render/shaders.ts",
+    "src/core/animation.ts",
+    "src/core/spinQueue.ts",
+    "src/core/uiControls.ts",
+    "vite-env.d.ts",
+    "vite.config.ts"
+  ],
+  "include": ["src/**/*.ts", "vite-env.d.ts", "vite.config.ts"]
 }
