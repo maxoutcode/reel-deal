@@ -1,22 +1,28 @@
-import {
-  defaultFinalSpinLine,
-  defaultIdleBob,
-  defaultSpinBlur,
-  defaultSpinConfig,
-  defaultWebglShading,
-} from './defaults';
+import { defaultSpinConfig } from './defaults';
+import { defaultIdleBob, defaultSpinBlur, defaultWebGLShading } from './internalDefaults';
 import type {
-  ReelDealFinalSpinLine,
   ReelDealIdleBob,
   ReelDealSpinBlur,
   ReelDealSpinConfig,
   ReelDealWebGLShading,
 } from './types';
-import { clamp01, finiteOr, nonNegative, nonNegativeInt } from './utils/math';
+import { finiteOr } from './utils/math';
 
 const DEFAULT_MAX_DPR = 2;
 
 type NormalizedSpinConfig = Required<ReelDealSpinConfig>;
+
+const nonNegativeOrDefault = (value: number | undefined, fallback: number): number => {
+  const v = finiteOr(value, fallback);
+
+  return v < 0 ? fallback : Math.max(0, v);
+};
+
+const nonNegativeIntOrDefault = (value: number | undefined, fallback: number): number => {
+  const v = finiteOr(value, fallback);
+
+  return v < 0 ? fallback : Math.max(0, Math.floor(v));
+};
 
 export const normalizeSpinConfig = (
   overrides?: Partial<ReelDealSpinConfig>,
@@ -24,10 +30,10 @@ export const normalizeSpinConfig = (
   const base = { ...defaultSpinConfig, ...(overrides ?? {}) };
 
   return {
-    minSpins: nonNegativeInt(base.minSpins, defaultSpinConfig.minSpins ?? 0),
-    durationMs: nonNegativeInt(base.durationMs, defaultSpinConfig.durationMs ?? 0),
-    speedPxS: nonNegativeInt(base.speedPxS, defaultSpinConfig.speedPxS ?? 0),
-    staggerMs: nonNegativeInt(base.staggerMs, defaultSpinConfig.staggerMs ?? 0),
+    minSpins: nonNegativeIntOrDefault(base.minSpins, defaultSpinConfig.minSpins),
+    durationMs: nonNegativeIntOrDefault(base.durationMs, defaultSpinConfig.durationMs ?? 0),
+    speedPxS: nonNegativeIntOrDefault(base.speedPxS, defaultSpinConfig.speedPxS ?? 0),
+    staggerMs: nonNegativeIntOrDefault(base.staggerMs, defaultSpinConfig.staggerMs ?? 0),
   };
 };
 
@@ -35,8 +41,8 @@ export const normalizeSpinBlur = (overrides?: Partial<ReelDealSpinBlur>): ReelDe
   const base = { ...defaultSpinBlur, ...(overrides ?? {}) };
 
   return {
-    maxPx: nonNegative(base.maxPx, defaultSpinBlur.maxPx),
-    speedAtMax: nonNegative(base.speedAtMax, defaultSpinBlur.speedAtMax),
+    maxPx: nonNegativeOrDefault(base.maxPx, defaultSpinBlur.maxPx),
+    speedAtMax: nonNegativeOrDefault(base.speedAtMax, defaultSpinBlur.speedAtMax),
   };
 };
 
@@ -48,31 +54,24 @@ export const normalizeIdleBob = (
   const base = { ...defaultIdleBob, ...(overrides ?? {}) };
 
   return {
-    amplitudePx: nonNegative(base.amplitudePx, defaultIdleBob.amplitudePx),
-    speedHz: nonNegative(base.speedHz, defaultIdleBob.speedHz),
+    amplitudePx: nonNegativeOrDefault(base.amplitudePx, defaultIdleBob.amplitudePx),
+    speedHz: nonNegativeOrDefault(base.speedHz, defaultIdleBob.speedHz),
     phaseOffsetRad: finiteOr(base.phaseOffsetRad, defaultIdleBob.phaseOffsetRad),
-    rampMs: nonNegativeInt(base.rampMs, defaultIdleBob.rampMs),
+    rampMs: nonNegativeIntOrDefault(base.rampMs, defaultIdleBob.rampMs),
+    idleDelayMs: nonNegativeIntOrDefault(base.idleDelayMs, defaultIdleBob.idleDelayMs),
+  };
+};
+
+export const normalizeWebGLShading = (
+  overrides?: Partial<ReelDealWebGLShading>,
+): ReelDealWebGLShading => {
+  const base = { ...defaultWebGLShading, ...(overrides ?? {}) };
+
+  return {
+    warpAngleDeg: nonNegativeOrDefault(base.warpAngleDeg, defaultWebGLShading.warpAngleDeg),
+    edgePower: nonNegativeOrDefault(base.edgePower, defaultWebGLShading.edgePower),
   };
 };
 
 export const normalizeMaxDpr = (value?: number): number =>
   Math.max(1, finiteOr(value, DEFAULT_MAX_DPR));
-
-export const normalizeWebGLShading = (
-  overrides?: Partial<ReelDealWebGLShading>,
-): ReelDealWebGLShading => ({
-  warpAngleDeg: nonNegative(overrides?.warpAngleDeg, defaultWebglShading.warpAngleDeg),
-  edgePower: nonNegative(overrides?.edgePower, defaultWebglShading.edgePower),
-});
-
-export const normalizeFinalSpinLine = (
-  overrides?: Partial<ReelDealFinalSpinLine> | false,
-): ReelDealFinalSpinLine | null => {
-  if (overrides === false) return null;
-  if (!overrides) return null;
-
-  return {
-    thickness: nonNegative(overrides.thickness, defaultFinalSpinLine.thickness),
-    intensity: clamp01(overrides.intensity ?? defaultFinalSpinLine.intensity),
-  };
-};

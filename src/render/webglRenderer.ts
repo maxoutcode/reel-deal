@@ -1,6 +1,5 @@
-import type { ReelDealFinalSpinLine, ReelDealSpinBlur, ReelDealWebGLShading } from '../types';
+import type { ReelDealSpinBlur, ReelDealWebGLShading } from '../types';
 import { clamp01, mod } from '../utils/math';
-import { LineRenderer } from './lineRenderer';
 import { reelFragmentShader, reelVertexShader } from './shaders';
 
 export type RendererInit = {
@@ -14,7 +13,6 @@ export type RendererInit = {
   heightScale: number;
   spinBlur: ReelDealSpinBlur;
   webglShading: ReelDealWebGLShading;
-  finalSpinLine: ReelDealFinalSpinLine | null;
 };
 
 export type RenderFrame = {
@@ -27,8 +25,6 @@ export interface Renderer {
   init(init: RendererInit): void;
   render(frame: RenderFrame): void;
   onResize(width: number, height: number): void;
-  showFinalLine(): void;
-  hideFinalLine(): void;
   dispose(): void;
   getError(): string | null;
 }
@@ -60,8 +56,6 @@ export class WebGLRenderer implements Renderer {
   private canvas: HTMLCanvasElement | null = null;
   private spriteImg: HTMLImageElement | null = null;
   private webglInitError: string | null = null;
-  private lineRenderer: LineRenderer | null = null;
-  private showLine = false;
 
   init(init: RendererInit): void {
     this.canvas = init.canvas;
@@ -75,10 +69,7 @@ export class WebGLRenderer implements Renderer {
       heightScale: init.heightScale,
       spinBlur: init.spinBlur,
       webglShading: init.webglShading,
-      finalSpinLine: init.finalSpinLine,
     };
-
-    this.lineRenderer = init.finalSpinLine ? new LineRenderer() : null;
 
     this.tryInitWebGL();
 
@@ -98,7 +89,6 @@ export class WebGLRenderer implements Renderer {
     if (!this.glProgram || !this.glAttribs || !this.glUniforms || !this.glBuffer) return;
 
     this.renderWebGL(frame);
-    this.renderFinalLine(frame);
   }
 
   onResize(width: number, height: number): void {
@@ -107,24 +97,11 @@ export class WebGLRenderer implements Renderer {
     this.gl.viewport(0, 0, width, height);
   }
 
-  showFinalLine(): void {
-    if (!this.config?.finalSpinLine) return;
-
-    this.showLine = true;
-    this.lineRenderer?.showLine();
-  }
-
-  hideFinalLine(): void {
-    this.showLine = false;
-    this.lineRenderer?.hideLine();
-  }
-
   dispose(): void {
     if (!this.gl) return;
     if (this.glTexture) this.gl.deleteTexture(this.glTexture);
     if (this.glBuffer) this.gl.deleteBuffer(this.glBuffer);
     if (this.glProgram) this.gl.deleteProgram(this.glProgram);
-    if (this.lineRenderer) this.lineRenderer.dispose(this.gl);
 
     this.glTexture = null;
     this.glBuffer = null;
@@ -256,10 +233,6 @@ export class WebGLRenderer implements Renderer {
       warpAngle: gl.getUniformLocation(program, 'u_warpAngle'),
       blurPx: gl.getUniformLocation(program, 'u_blurPx'),
     };
-
-    if (this.config.finalSpinLine && this.lineRenderer) {
-      this.lineRenderer.init(gl, this.config.finalSpinLine);
-    }
   }
 
   private createWebGLProgram(
@@ -397,12 +370,5 @@ export class WebGLRenderer implements Renderer {
       gl.uniform1f(this.glUniforms.blurPx, this.getSpinBlurPxForReel(r, frame.velocities));
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
-  }
-
-  private renderFinalLine(frame: RenderFrame): void {
-    if (!this.showLine || !this.config?.finalSpinLine) return;
-    if (!this.gl || !this.canvas || !this.lineRenderer) return;
-
-    this.lineRenderer.render(this.gl, this.canvas, this.config.finalSpinLine, frame.dpr);
   }
 }

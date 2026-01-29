@@ -1,15 +1,22 @@
 import { loadSprite } from './assets/spriteLoader';
 import {
+  MAX_REELS,
+  SPIN_TICK_MAX_PX,
+  SPIN_TICK_RANGE,
+  SPIN_TICK_START,
+  STOP_SPRING_DAMPING,
+  STOP_SPRING_MAX_RATIO,
+  STOP_SPRING_OSCILLATIONS,
+  STOP_SPRING_OVERSHOOT_PX,
+  STOP_SPRING_SETTLE_MS,
+} from './constants';
+import {
   buildSpinPlan,
   getStopSpringOffset,
   updateIdleOffsets,
   updateVelocities,
 } from './core/animation';
-import { RafLoop } from './core/loop';
-import { SpinQueueController } from './core/spinQueue';
-import { SpinUiController } from './core/uiControls';
 import {
-  normalizeFinalSpinLine,
   normalizeIdleBob,
   normalizeMaxDpr,
   normalizeSpinBlur,
@@ -18,26 +25,15 @@ import {
 } from './normalize';
 import { WebGLRenderer } from './render/webglRenderer';
 import type {
-  ReelDealFinalSpinLine,
   ReelDealIdleBob,
   ReelDealOptions,
   ReelDealSpinBlur,
   ReelDealSpinConfig,
-  ReelDealSpinRequest,
   ReelDealSpinState,
-  ReelDealSpriteSource,
   ReelDealWebGLShading,
 } from './types';
 import { resolveElement } from './utils/dom';
 import { clamp01, clampInt, reelProgress } from './utils/math';
-
-const MAX_REELS = 5;
-const SPIN_TICK_START = 0.72;
-const SPIN_TICK_RANGE = 0.28;
-const SPIN_TICK_MAX_PX = 7;
-const STOP_SPRING_OVERSHOOT_PX = 55;
-const STOP_SPRING_SETTLE_MS = 300;
-const STOP_SPRING_MAX_RATIO = 0.35;
 
 type SpinAnimation = {
   startTime: number;
@@ -48,18 +44,11 @@ type SpinAnimation = {
   targets: number[];
 };
 
-type RequiredOptions = ReelDealOptions & {
-  canvas: HTMLCanvasElement | string;
-  container: HTMLElement | string;
-  sprite: ReelDealSpriteSource;
-  slotCount: number;
-};
-
 export class ReelDeal {
   private readonly canvas: HTMLCanvasElement;
   private readonly container: HTMLElement;
 
-  private readonly opts: RequiredOptions;
+  private readonly opts: ReelDealOptions;
   private readonly visibleSlots = 3;
   private readonly heightScale = 2 / 3;
   private readonly centerIndex = 1;
@@ -69,7 +58,6 @@ export class ReelDeal {
   private readonly webglShading: ReelDealWebGLShading;
   private readonly idleBob: ReelDealIdleBob | null;
   private readonly maxDpr: number;
-  private readonly finalSpinLine: ReelDealFinalSpinLine | null;
 
   private spriteImg: HTMLImageElement | null = null;
   private spriteWidth = 0;
@@ -80,115 +68,61 @@ export class ReelDeal {
   private height = 0;
   private dpr = 1;
 
-  private readonly offsets: Float32Array;
-  private readonly velocities: Float32Array;
+  private readonly offsets: number[];
+  private readonly velocities: number[];
   private lastVelT: number | null = null;
-  private readonly lastVelOffsets: Float32Array;
+  private readonly lastVelOffsets: number[];
   private idleStartTime: number | null = null;
-  private readonly idleBaseOffsets: Float32Array;
+  private readonly idleBaseOffsets: number[];
 
   private renderer: WebGLRenderer | null = null;
-  private webglInitError: string | null = null;
 
   private anim: SpinAnimation | null = null;
-  private readonly loop = new RafLoop();
-  private pendingSpinResolvers: Array<{
-    resolve: () => void;
-    reject: (error: unknown) => void;
-    cleanup: () => void;
-  }> = [];
-
-  private showFinalLine = false;
-  private isLastSpin = false;
+  private rafId: number | null = null;
+  private pendingSpinResolvers: Array<() => void> = [];
 
   private resizeObserver: ResizeObserver | null = null;
   private resizeQueued = false;
 
   private button: HTMLButtonElement | null = null;
-  private uiController: SpinUiController | null = null;
-  private readonly spinQueueController: SpinQueueController;
+  private buttonHandlerAttached = false;
+  private spinning = false;
+  private queuedSpins: ReelDealSpinState[] | null = null;
 
   constructor(options: ReelDealOptions) {
-    if (!options.canvas) throw new Error('ReelDeal: canvas is required');
-    if (!options.container) throw new Error('ReelDeal: container is required');
-    if (!options.sprite) throw new Error('ReelDeal: sprite is required');
-    if (options.slotCount === undefined) throw new Error('ReelDeal: slotCount is required');
-
-    const required: RequiredOptions = {
-      ...options,
-      canvas: options.canvas,
-      container: options.container,
-      sprite: options.sprite,
-      slotCount: clampInt(options.slotCount, 1, Number.MAX_SAFE_INTEGER),
-    };
-
-    this.opts = required;
+    this.opts = options;
     this.reels = clampInt(options.reels ?? 1, 1, MAX_REELS);
     this.spinConfig = normalizeSpinConfig(options.spinConfig);
-    this.spinBlur = normalizeSpinBlur(options.spinBlur);
-    this.webglShading = normalizeWebGLShading(options.webglShading);
-    this.idleBob = normalizeIdleBob(options.idleBob);
+    this.spinBlur = normalizeSpinBlur();
+    this.webglShading = normalizeWebGLShading();
+    this.idleBob = normalizeIdleBob();
     this.maxDpr = normalizeMaxDpr(options.maxDpr);
-    this.finalSpinLine = normalizeFinalSpinLine(options.finalSpinLine);
 
-    this.canvas = resolveElement<HTMLCanvasElement>(required.canvas, 'Canvas');
-    this.container = resolveElement<HTMLElement>(required.container, 'Container');
+    this.canvas = resolveElement<HTMLCanvasElement>(options.canvas, 'Canvas');
+    this.container = resolveElement<HTMLElement>(options.container, 'Container');
 
-    this.offsets = new Float32Array(this.reels);
-    this.velocities = new Float32Array(this.reels);
-    this.lastVelOffsets = new Float32Array(this.reels);
-    this.idleBaseOffsets = new Float32Array(this.reels);
-
-    this.spinQueueController = new SpinQueueController({
-      slotCount: required.slotCount,
-      reels: this.reels,
-      initialQueue: required.queuedSpinStates,
-    });
-  }
-
-  private initRenderer(): void {
-    if (!this.spriteImg) return;
-
-    const renderer = new WebGLRenderer();
-
-    try {
-      renderer.init({
-        canvas: this.canvas,
-        spriteImg: this.spriteImg,
-        spriteWidth: this.spriteWidth,
-        spriteHeight: this.spriteHeight,
-        frameHeight: this.frameHeight,
-        reels: this.reels,
-        visibleSlots: this.visibleSlots,
-        heightScale: this.heightScale,
-        spinBlur: this.spinBlur,
-        webglShading: this.webglShading,
-        finalSpinLine: this.finalSpinLine,
-      });
-      this.webglInitError = renderer.getError();
-      this.renderer = renderer;
-    } catch (error) {
-      this.webglInitError =
-        renderer.getError() ?? (error instanceof Error ? error.message : String(error));
-      throw error;
-    }
+    this.offsets = new Array(this.reels).fill(0);
+    this.velocities = new Array(this.reels).fill(0);
+    this.lastVelOffsets = new Array(this.reels).fill(0);
+    this.idleBaseOffsets = new Array(this.reels).fill(0);
   }
 
   async init(): Promise<void> {
-    const sprite = await loadSprite(this.opts.sprite, this.opts.slotCount);
+    await this.loadSprite();
 
-    this.spriteImg = sprite.image;
-    this.spriteWidth = sprite.spriteWidth;
-    this.frameHeight = sprite.frameHeight;
-    this.spriteHeight = sprite.spriteHeight;
-
-    this.initRenderer();
-
-    if (!this.renderer) {
-      throw new Error(
-        `WebGL is not supported or failed to initialize. ${this.webglInitError ?? ''}`.trim(),
-      );
-    }
+    this.renderer = new WebGLRenderer();
+    this.renderer.init({
+      canvas: this.canvas,
+      spriteImg: this.spriteImg as HTMLImageElement,
+      spriteWidth: this.spriteWidth,
+      spriteHeight: this.spriteHeight,
+      frameHeight: this.frameHeight,
+      reels: this.reels,
+      visibleSlots: this.visibleSlots,
+      heightScale: this.heightScale,
+      spinBlur: this.spinBlur,
+      webglShading: this.webglShading,
+    });
 
     this.syncContainerLayoutVars();
     this.ensureCanvasCoversContainer();
@@ -198,8 +132,10 @@ export class ReelDeal {
     this.setSegments(this.opts.initialSegments);
 
     this.button = this.resolveButton();
-    this.uiController = new SpinUiController(this.button, this.handleButtonClick);
-    this.uiController.updateAvailability(true);
+    this.queuedSpins = this.resolveSpinQueue();
+    this.setButtonDisabled(!this.queuedSpins || this.queuedSpins.length === 0);
+
+    this.attachButtonHandler();
 
     this.render();
     this.startLoop();
@@ -213,8 +149,10 @@ export class ReelDeal {
       this.resizeObserver = null;
     }
 
-    this.uiController?.dispose();
-    this.uiController = null;
+    if (this.button && this.buttonHandlerAttached) {
+      this.button.removeEventListener('click', this.handleButtonClick);
+      this.buttonHandlerAttached = false;
+    }
 
     if (this.renderer) {
       this.renderer.dispose();
@@ -271,28 +209,16 @@ export class ReelDeal {
     this.setSegments(new Array(this.reels).fill(segmentIndex));
   }
 
-  spinOnce(
-    request: ReelDealSpinRequest | number[],
-    configOverride?: Partial<ReelDealSpinConfig>,
-  ): Promise<void> {
+  spinOnce(stopAtSegments: number[], config?: Partial<ReelDealSpinConfig>): Promise<void> {
     this.ensureReady();
 
-    const normalizedRequest: ReelDealSpinRequest = Array.isArray(request)
-      ? { stopAtSegments: request, config: configOverride }
-      : request;
-
-    if (normalizedRequest.signal?.aborted) {
-      return Promise.reject(
-        normalizedRequest.signal.reason ?? new DOMException('Aborted', 'AbortError'),
-      );
-    }
-
-    const spinConfig = this.getSpinConfig(normalizedRequest.config ?? configOverride);
-    const useSpeed = spinConfig.speedPxS > 0;
+    const spinConfig = this.getSpinConfig(config);
+    const useSpeed = (spinConfig.speedPxS ?? 0) > 0;
     const stopSpringOvershootPx = this.getStopSpringOvershootPx();
     const stopSpringSettleMs = Math.max(0, STOP_SPRING_SETTLE_MS);
+
     const plan = buildSpinPlan({
-      stopAtSegments: normalizedRequest.stopAtSegments,
+      stopAtSegments,
       currentOffsets: this.offsets,
       reels: this.reels,
       frameHeight: this.frameHeight,
@@ -332,64 +258,8 @@ export class ReelDeal {
 
     this.startLoop();
 
-    const abortController = new AbortController();
-
-    const abortListener = (): void => {
-      const reason =
-        abortController.signal.reason ?? normalizedRequest.signal?.reason ?? 'Spin aborted';
-
-      this.stop(reason);
-    };
-
-    const externalAbort = (): void => {
-      abortController.abort(
-        normalizedRequest.signal?.reason ?? new DOMException('Aborted', 'AbortError'),
-      );
-    };
-
-    if (normalizedRequest.signal) {
-      normalizedRequest.signal.addEventListener('abort', externalAbort, { once: true });
-    }
-
-    let timeoutId: number | null = null;
-
-    if (normalizedRequest.timeoutMs && normalizedRequest.timeoutMs > 0) {
-      timeoutId = window.setTimeout(() => {
-        abortController.abort(new DOMException('Spin timed out', 'TimeoutError'));
-      }, normalizedRequest.timeoutMs);
-    }
-
-    return new Promise((resolve, reject) => {
-      const cleanup = (): void => {
-        if (timeoutId !== null) window.clearTimeout(timeoutId);
-
-        abortController.signal.removeEventListener('abort', abortListener);
-
-        if (normalizedRequest.signal) {
-          normalizedRequest.signal.removeEventListener('abort', externalAbort);
-        }
-      };
-
-      if (abortController.signal.aborted) {
-        cleanup();
-
-        reject(abortController.signal.reason ?? new DOMException('Aborted', 'AbortError'));
-
-        return;
-      }
-
-      abortController.signal.addEventListener('abort', abortListener, { once: true });
-      this.pendingSpinResolvers.push({
-        resolve: () => {
-          cleanup();
-          resolve();
-        },
-        reject: (error) => {
-          cleanup();
-          reject(error);
-        },
-        cleanup,
-      });
+    return new Promise((resolve) => {
+      this.pendingSpinResolvers.push(resolve);
     });
   }
 
@@ -409,9 +279,6 @@ export class ReelDeal {
   }
 
   async spinQueue(spins: ReelDealSpinState[]): Promise<void> {
-    this.spinQueueController.reset(spins);
-    this.uiController?.updateAvailability(true);
-
     for (let i = 0; i < spins.length; i += 1) {
       const spin = spins[i];
 
@@ -419,23 +286,19 @@ export class ReelDeal {
 
       spin.callback?.(i, spin.stopAtSegments);
     }
-
-    this.uiController?.updateAvailability(true);
   }
 
-  stop(error?: unknown): void {
-    this.loop.stop();
+  stop(): void {
+    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+
+    this.rafId = null;
     this.anim = null;
-
-    if (error !== undefined) {
-      this.rejectPendingSpins(error);
-    } else {
-      this.resolvePendingSpins();
-    }
-
+    this.resolvePendingSpins();
     this.lastVelT = null;
 
-    this.velocities.fill(0);
+    for (let r = 0; r < this.reels; r += 1) {
+      this.velocities[r] = 0;
+    }
   }
 
   private resolvePendingSpins(): void {
@@ -445,22 +308,8 @@ export class ReelDeal {
 
     this.pendingSpinResolvers = [];
 
-    for (const { resolve, cleanup } of resolvers) {
-      cleanup();
+    for (const resolve of resolvers) {
       resolve();
-    }
-  }
-
-  private rejectPendingSpins(error: unknown): void {
-    if (this.pendingSpinResolvers.length === 0) return;
-
-    const resolvers = this.pendingSpinResolvers;
-
-    this.pendingSpinResolvers = [];
-
-    for (const { reject, cleanup } of resolvers) {
-      cleanup();
-      reject(error);
     }
   }
 
@@ -479,18 +328,37 @@ export class ReelDeal {
     }
   }
 
+  private attachButtonHandler(): void {
+    if (!this.button || this.buttonHandlerAttached) return;
+
+    this.button.addEventListener('click', this.handleButtonClick, { passive: true });
+    this.buttonHandlerAttached = true;
+  }
+
   private handleButtonClick = async (): Promise<void> => {
-    this.hideFinalLine();
+    if (this.spinning) return;
 
-    const entry = this.spinQueueController.consume();
+    const spin = this.consumeNextSpin();
 
-    this.isLastSpin = entry.isLast;
-    this.uiController?.updateAvailability(true);
+    if (!spin) {
+      this.setButtonDisabled(true);
 
-    await this.spinOnce(entry.state.stopAtSegments);
+      return;
+    }
 
-    if (this.isLastSpin && this.finalSpinLine) {
-      this.showFinalLineEffect();
+    this.spinning = true;
+    this.setButtonDisabled(true);
+
+    try {
+      await this.spinOnce(spin.stopAtSegments);
+    } finally {
+      if (this.queuedSpins && this.queuedSpins.length === 0) {
+        this.setButtonDisabled(true);
+      } else {
+        this.setButtonDisabled(!this.queuedSpins || this.queuedSpins.length === 0);
+      }
+
+      this.spinning = false;
     }
   };
 
@@ -500,18 +368,41 @@ export class ReelDeal {
     return resolveElement<HTMLButtonElement>(this.opts.button, 'Button');
   }
 
+  private resolveSpinQueue(): ReelDealSpinState[] | null {
+    return this.opts.queuedSpinStates ?? null;
+  }
+
+  private consumeNextSpin(): ReelDealSpinState | null {
+    if (!this.queuedSpins) {
+      this.queuedSpins = this.resolveSpinQueue();
+    }
+
+    if (!this.queuedSpins || this.queuedSpins.length === 0) return null;
+
+    return this.queuedSpins.shift() ?? null;
+  }
+
+  private setButtonDisabled(disabled: boolean): void {
+    if (!this.button) return;
+
+    this.button.disabled = disabled;
+
+    if (disabled) this.button.setAttribute('aria-busy', 'true');
+    else this.button.removeAttribute('aria-busy');
+  }
+
   private shouldAnimate(): boolean {
-    return this.anim !== null || this.idleBob !== null || this.showFinalLine;
+    return this.anim !== null || this.idleBob !== null;
   }
 
   private startLoop(): void {
-    if (this.loop.isRunning()) return;
+    if (this.rafId !== null) return;
     if (!this.shouldAnimate()) return;
 
-    this.loop.start(this.tick);
+    this.rafId = requestAnimationFrame(this.loop);
   }
 
-  private tick = (now: number): boolean => {
+  private loop = (now: number): void => {
     if (this.anim) {
       const { startTime, durationMs, startOffsets, deltas, settleDurationMs, targets } = this.anim;
       const elapsed = now - startTime;
@@ -548,7 +439,12 @@ export class ReelDeal {
             duration <= 0 ? elapsed / settleDuration : (elapsed - duration) / settleDuration;
           const u = clamp01(t);
           const overshoot = startOffsets[r] + deltas[r] - targetOffset;
-          const spring = getStopSpringOffset(overshoot, u);
+          const spring = getStopSpringOffset(
+            overshoot,
+            u,
+            STOP_SPRING_DAMPING,
+            STOP_SPRING_OSCILLATIONS,
+          );
 
           if (u < 1) allDone = false;
 
@@ -558,7 +454,16 @@ export class ReelDeal {
         }
       }
 
-      this.updateVelocity(now);
+      this.lastVelT = updateVelocities(
+        now,
+        {
+          lastVelT: this.lastVelT,
+          lastVelOffsets: this.lastVelOffsets,
+          velocities: this.velocities,
+        },
+        this.offsets,
+      );
+
       this.render();
 
       if (allDone) {
@@ -570,7 +475,15 @@ export class ReelDeal {
           this.idleBaseOffsets[r] = this.offsets[r];
         }
 
-        this.updateVelocity(now);
+        this.lastVelT = updateVelocities(
+          now,
+          {
+            lastVelT: this.lastVelT,
+            lastVelOffsets: this.lastVelOffsets,
+            velocities: this.velocities,
+          },
+          this.offsets,
+        );
 
         for (let r = 0; r < this.reels; r += 1) {
           this.velocities[r] = 0;
@@ -583,11 +496,29 @@ export class ReelDeal {
         this.resolvePendingSpins();
       }
     } else if (this.idleBob) {
-      this.updateIdle(now);
+      this.idleStartTime = updateIdleOffsets(
+        now,
+        {
+          idleStartTime: this.idleStartTime,
+          idleBaseOffsets: this.idleBaseOffsets,
+          velocities: this.velocities,
+        },
+        this.idleBob,
+        this.offsets,
+        this.reels,
+      );
       this.render();
     }
 
-    return this.shouldAnimate();
+    if (!this.shouldAnimate()) {
+      this.rafId = null;
+
+      return;
+    }
+
+    if (this.rafId === null) return;
+
+    this.rafId = requestAnimationFrame(this.loop);
   };
 
   private render(): void {
@@ -602,32 +533,13 @@ export class ReelDeal {
     });
   }
 
-  private updateVelocity(now: number): void {
-    this.lastVelT = updateVelocities(
-      now,
-      {
-        lastVelT: this.lastVelT,
-        lastVelOffsets: this.lastVelOffsets,
-        velocities: this.velocities,
-      },
-      this.offsets,
-    );
-  }
+  private async loadSprite(): Promise<void> {
+    const loaded = await loadSprite(this.opts.sprite, this.opts.slotCount);
 
-  private updateIdle(now: number): void {
-    if (!this.idleBob) return;
-
-    this.idleStartTime = updateIdleOffsets(
-      now,
-      {
-        idleStartTime: this.idleStartTime,
-        idleBaseOffsets: this.idleBaseOffsets,
-        velocities: this.velocities,
-      },
-      this.idleBob,
-      this.offsets,
-      this.reels,
-    );
+    this.spriteImg = loaded.image;
+    this.spriteWidth = loaded.spriteWidth;
+    this.frameHeight = loaded.frameHeight;
+    this.spriteHeight = loaded.spriteHeight;
   }
 
   private setupResizeWatcher(): void {
@@ -709,21 +621,5 @@ export class ReelDeal {
     const base = Math.max(1, rawDpr);
 
     return Math.min(this.maxDpr, base);
-  }
-
-  hideFinalLine(): void {
-    this.showFinalLine = false;
-    this.renderer?.hideFinalLine();
-
-    this.render();
-  }
-
-  showFinalLineEffect(): void {
-    if (!this.finalSpinLine) return;
-
-    this.showFinalLine = true;
-    this.renderer?.showFinalLine();
-
-    this.startLoop();
   }
 }

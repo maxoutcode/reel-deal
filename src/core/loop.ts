@@ -16,6 +16,7 @@ export class RafLoop {
   stop(): void {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
+
       this.rafId = null;
     }
 
@@ -51,6 +52,7 @@ export class RafLoop {
     if (!signal) return;
     if (signal.aborted) {
       this.stop();
+
       return;
     }
 

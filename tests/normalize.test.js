@@ -12,7 +12,6 @@ if (api) {
     normalizeSpinConfig,
     normalizeSpinBlur,
     normalizeIdleBob,
-    normalizeFinalSpinLine,
     normalizeMaxDpr,
   } = api;
 
@@ -35,14 +34,6 @@ if (api) {
     assert.ok(idle);
     assert.equal(idle.amplitudePx, 9);
     assert.equal(idle.speedHz, 2);
-  });
-
-  test('normalizeFinalSpinLine skips when false and clamps intensity', () => {
-    assert.equal(normalizeFinalSpinLine(false), null);
-    const line = normalizeFinalSpinLine({ intensity: 2, thickness: -10 });
-    assert.ok(line);
-    assert.equal(line.thickness, 6);
-    assert.equal(line.intensity, 1);
   });
 
   test('normalizeMaxDpr clamps minimum to 1', () => {

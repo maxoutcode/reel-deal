@@ -1,6 +1,4 @@
 import type { ReelDealSpinState } from '../types';
-import { clampInt } from '../utils/math';
-
 export type SpinQueueConfig = {
   slotCount: number;
   reels: number;
@@ -32,32 +30,15 @@ export class SpinQueueController {
     return this.queue.length > 0;
   }
 
-  consume(): SpinQueueEntry {
-    if (this.queue.length === 0) {
-      return {
-        state: { stopAtSegments: this.buildRandomSegments() },
-        remaining: 0,
-        isLast: true,
-      };
-    }
+  consume(): SpinQueueEntry | null {
+    if (this.queue.length === 0) return null;
 
-    const state = this.queue.shift() ?? { stopAtSegments: this.buildRandomSegments() };
+    const state = this.queue.shift();
 
     return {
-      state,
+      state: state ?? { stopAtSegments: [] },
       remaining: this.queue.length,
       isLast: this.queue.length === 0,
     };
-  }
-
-  private buildRandomSegments(): number[] {
-    const max = this.slotCount;
-    const segments: number[] = [];
-
-    for (let r = 0; r < this.reels; r += 1) {
-      segments.push(clampInt(Math.floor(Math.random() * max), 0, max - 1));
-    }
-
-    return segments;
   }
 }

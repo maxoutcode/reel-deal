@@ -1,0 +1,9 @@
+export const MAX_REELS = 5;
+export const SPIN_TICK_START = 0.72;
+export const SPIN_TICK_RANGE = 0.28;
+export const SPIN_TICK_MAX_PX = 7;
+export const STOP_SPRING_OVERSHOOT_PX = 50;
+export const STOP_SPRING_SETTLE_MS = 500;
+export const STOP_SPRING_OSCILLATIONS = 1.5;
+export const STOP_SPRING_DAMPING = 8;
+export const STOP_SPRING_MAX_RATIO = 0.3;

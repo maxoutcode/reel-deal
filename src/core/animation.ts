@@ -1,5 +1,5 @@
 import type { ReelDealIdleBob, ReelDealSpinConfig } from '../types';
-import { clampInt, mod } from '../utils/math';
+import { clamp01, clampInt, mod, rampHermite } from '../utils/math';
 
 type NumericArray = number[] | Float32Array | Int32Array | Uint32Array;
 
@@ -72,13 +72,6 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
       delta = -(alignDelta + loops * spriteHeight);
     }
 
-    if (staggerMs > 0 && useSpeed) {
-      const extraDelta = (speedPxS * staggerMs * r) / 1000;
-      const extraLoops = Math.ceil(extraDelta / spriteHeight);
-
-      delta -= extraLoops * spriteHeight;
-    }
-
     startOffsets[r] = currentOffsets[r];
     targets[r] = currentOffsets[r] + delta;
 
@@ -97,7 +90,9 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
     settleDurationMs[r] = settleDuration;
 
     if (useSpeed) {
-      durations[r] = Math.max(0, Math.round((Math.abs(finalDelta) / speedPxS) * 1000));
+      const baseDuration = Math.round((Math.abs(finalDelta) / speedPxS) * 1000);
+
+      durations[r] = Math.max(0, baseDuration + staggerMs * r);
     } else {
       durations[r] = Math.max(0, durationMs + staggerMs * r);
     }
@@ -119,11 +114,16 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
   };
 };
 
-export const getStopSpringOffset = (overshoot: number, t: number): number => {
+export const getStopSpringOffset = (
+  overshoot: number,
+  t: number,
+  damping = 5,
+  oscillations = 1.25,
+): number => {
   if (overshoot === 0) return 0;
 
-  const decay = Math.exp(-5 * t);
-  const angle = Math.PI * 2 * 1.25 * t;
+  const decay = Math.exp(-damping * t);
+  const angle = Math.PI * 2 * oscillations * t;
 
   return overshoot * decay * Math.cos(angle);
 };
@@ -184,12 +184,22 @@ export const updateIdleOffsets = (
 ): number | null => {
   if (idleState.idleStartTime === null) idleState.idleStartTime = now;
 
-  const { amplitudePx, speedHz, phaseOffsetRad, rampMs } = idleBob;
+  const { amplitudePx, speedHz, phaseOffsetRad, rampMs, idleDelayMs } = idleBob;
   const elapsedMs = now - idleState.idleStartTime;
 
-  const tSec = elapsedMs / 1000;
-  const rampT = Math.max(0, Math.min(1, elapsedMs / Math.max(1, rampMs)));
-  const ramp = Math.min(1, Math.max(0, rampT * rampT * (2 - rampT)));
+  if (elapsedMs < idleDelayMs) {
+    for (let r = 0; r < reels; r += 1) {
+      offsets[r] = idleState.idleBaseOffsets[r];
+      idleState.velocities[r] = 0;
+    }
+
+    return idleState.idleStartTime;
+  }
+
+  const idleElapsedMs = elapsedMs - idleDelayMs;
+  const tSec = idleElapsedMs / 1000;
+  const rampT = clamp01(idleElapsedMs / Math.max(1, rampMs));
+  const ramp = rampHermite(rampT);
   const omega = speedHz * Math.PI * 2;
 
   for (let r = 0; r < reels; r += 1) {
