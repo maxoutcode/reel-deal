@@ -1,6 +1,6 @@
 {
   "name": "reel-deal",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "High-performance WebGL slot reel animation for any HTMLCanvasElement.",
   "author": "ux-ui.pro",
   "license": "MIT",

@@ -88,6 +88,7 @@ export class ReelDeal {
   private buttonHandlerAttached = false;
   private spinning = false;
   private queuedSpins: ReelDealSpinState[] | null = null;
+  private spinIndex = 0;
 
   constructor(options: ReelDealOptions) {
     this.opts = options;
@@ -351,6 +352,8 @@ export class ReelDeal {
 
     try {
       await this.spinOnce(spin.stopAtSegments);
+      spin.callback?.(this.spinIndex, spin.stopAtSegments);
+      this.spinIndex += 1;
     } finally {
       if (this.queuedSpins && this.queuedSpins.length === 0) {
         this.setButtonDisabled(true);
@@ -369,6 +372,7 @@ export class ReelDeal {
   }
 
   private resolveSpinQueue(): ReelDealSpinState[] | null {
+    this.spinIndex = 0;
     return this.opts.queuedSpinStates ?? null;
   }
 
