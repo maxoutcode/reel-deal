@@ -214,7 +214,6 @@ export class ReelDeal {
     this.ensureReady();
 
     const spinConfig = this.getSpinConfig(config);
-    const useSpeed = (spinConfig.speedPxS ?? 0) > 0;
     const stopSpringOvershootPx = this.getStopSpringOvershootPx();
     const stopSpringSettleMs = Math.max(0, STOP_SPRING_SETTLE_MS);
 
@@ -229,7 +228,6 @@ export class ReelDeal {
       spinConfig,
       stopSpringOvershootPx,
       stopSpringSettleMs,
-      useSpeed,
     });
 
     if (plan.totalDelta === 0 || (plan.allSpinZero && plan.allSettleZero)) {

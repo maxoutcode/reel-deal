@@ -1,8 +1,8 @@
 export interface ReelDealSpinConfig {
-  durationMs?: number;
   minSpins: number;
+  durationMs?: number;
   speedPxS?: number;
-  staggerMs?: number;
+  extraSpinsPerReel?: number;
 }
 
 export type ReelDealSpriteSource = string | HTMLImageElement;

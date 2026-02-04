@@ -68,18 +68,19 @@
         reels: 3,
         spinConfig: {
           minSpins: 2,
-          durationMs: 2500,
-          speedPxS: 4000,
-          staggerMs: 400,
-        },
-        finalSpinLine: {
-          thickness: 12,
-          intensity: 0.75,
+          durationMs: 1000,
+          extraSpinsPerReel: 1,
         },
         initialSegments: [1, 2, 3],
         queuedSpinStates: [
           {
-            stopAtSegments: [1, 1, 0],
+            stopAtSegments: [3, 1, 0],
+            callback: () => {
+              console.log('[ReelDeal] spin complete');
+            },
+          },
+          {
+            stopAtSegments: [5, 5, 1],
             callback: () => {
               console.log('[ReelDeal] spin complete');
             },

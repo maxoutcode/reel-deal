@@ -25,7 +25,6 @@ export type SpinPlanInput = {
   spinConfig: Required<ReelDealSpinConfig>;
   stopSpringOvershootPx: number;
   stopSpringSettleMs: number;
-  useSpeed: boolean;
 };
 
 export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
@@ -40,7 +39,6 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
     spinConfig,
     stopSpringOvershootPx,
     stopSpringSettleMs,
-    useSpeed,
   } = input;
 
   const startOffsets = new Array(reels);
@@ -49,28 +47,38 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
   const settleDurationMs = new Array(reels);
   const targets = new Array(reels);
 
-  const { minSpins, staggerMs, speedPxS, durationMs } = spinConfig;
+  const minSpins = Math.max(0, Math.floor(spinConfig.minSpins));
+  const extraSpinsPerReel = Math.max(0, Math.floor(spinConfig.extraSpinsPerReel ?? 1));
+
   const stopSpringEnabled = stopSpringSettleMs > 0 && stopSpringOvershootPx > 0;
+
+  const distances = new Array<number>(reels);
 
   for (let r = 0; r < reels; r += 1) {
     const idx = clampInt(stopAtSegments[r] ?? 0, 0, slotCount - 1);
     const desiredTop = idx * frameHeight - centerIndex * frameHeight;
     const desired = mod(desiredTop, spriteHeight);
     const current = mod(currentOffsets[r], spriteHeight);
-
     const alignDelta = mod(current - desired, spriteHeight);
+    const loops = minSpins + r * extraSpinsPerReel;
 
-    let delta = -(minSpins * spriteHeight + alignDelta);
+    distances[r] = alignDelta + loops * spriteHeight;
+  }
 
-    if (useSpeed && durationMs > 0) {
-      const desiredDistance = (speedPxS * durationMs) / 1000;
-      const loops = Math.max(
-        minSpins,
-        Math.ceil(Math.max(0, desiredDistance - alignDelta) / spriteHeight),
-      );
+  const speedFromUser = Math.max(0, Math.floor(spinConfig.speedPxS ?? 0));
+  const durationMs = Math.max(0, Math.floor(spinConfig.durationMs ?? 0));
+  const baseDistance = Math.max(1, distances[0] ?? 1);
 
-      delta = -(alignDelta + loops * spriteHeight);
-    }
+  const speedPxS =
+    speedFromUser > 0
+      ? speedFromUser
+      : durationMs > 0
+        ? Math.max(1, Math.round((baseDistance / durationMs) * 1000))
+        : 1;
+
+  for (let r = 0; r < reels; r += 1) {
+    const distance = distances[r] ?? 0;
+    const delta = -distance;
 
     startOffsets[r] = currentOffsets[r];
     targets[r] = currentOffsets[r] + delta;
@@ -78,24 +86,17 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
     let finalDelta = delta;
     let settleDuration = 0;
 
-    if (stopSpringEnabled && delta !== 0 && stopSpringOvershootPx > 0) {
-      const direction = Math.sign(delta);
-      const overshoot = direction * stopSpringOvershootPx;
-
-      finalDelta += overshoot;
+    if (stopSpringEnabled && delta !== 0) {
+      finalDelta += Math.sign(delta) * stopSpringOvershootPx;
       settleDuration = stopSpringSettleMs;
     }
 
     deltas[r] = finalDelta;
     settleDurationMs[r] = settleDuration;
 
-    if (useSpeed) {
-      const baseDuration = Math.round((Math.abs(finalDelta) / speedPxS) * 1000);
+    const dur = Math.round((Math.abs(finalDelta) / speedPxS) * 1000);
 
-      durations[r] = Math.max(0, baseDuration + staggerMs * r);
-    } else {
-      durations[r] = Math.max(0, durationMs + staggerMs * r);
-    }
+    durations[r] = Math.max(0, dur);
   }
 
   const totalDelta = deltas.reduce((acc, v) => acc + Math.abs(v), 0);

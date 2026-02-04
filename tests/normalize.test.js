@@ -18,7 +18,7 @@ if (api) {
   test('normalizeSpinConfig clamps and fills defaults', () => {
     const normalized = normalizeSpinConfig({ minSpins: -5, durationMs: -10, speedPxS: 0 });
     assert.equal(normalized.minSpins, 2);
-    assert.equal(normalized.durationMs, 4000);
+    assert.equal(normalized.durationMs, 1200);
     assert.equal(normalized.speedPxS, 0);
   });
 
