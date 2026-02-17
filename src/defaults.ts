@@ -4,5 +4,6 @@ export const defaultSpinConfig: ReelDealSpinConfig = {
   minSpins: 2,
   durationMs: 1200,
   speedPxS: 0,
+  speedSymbolsS: 0,
   extraSpinsPerReel: 1,
 };

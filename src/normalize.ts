@@ -33,6 +33,7 @@ export const normalizeSpinConfig = (
     minSpins: nonNegativeIntOrDefault(base.minSpins, defaultSpinConfig.minSpins),
     durationMs: nonNegativeIntOrDefault(base.durationMs, defaultSpinConfig.durationMs ?? 0),
     speedPxS: nonNegativeIntOrDefault(base.speedPxS, defaultSpinConfig.speedPxS ?? 0),
+    speedSymbolsS: nonNegativeOrDefault(base.speedSymbolsS, defaultSpinConfig.speedSymbolsS ?? 0),
     extraSpinsPerReel: nonNegativeIntOrDefault(
       base.extraSpinsPerReel,
       defaultSpinConfig.extraSpinsPerReel ?? 1,

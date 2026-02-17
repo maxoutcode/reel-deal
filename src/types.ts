@@ -2,6 +2,7 @@ export interface ReelDealSpinConfig {
   minSpins: number;
   durationMs?: number;
   speedPxS?: number;
+  speedSymbolsS?: number;
   extraSpinsPerReel?: number;
 }
 

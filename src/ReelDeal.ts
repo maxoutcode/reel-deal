@@ -19,8 +19,8 @@ import {
 import { RafLoop } from './core/loop';
 import { SpinQueueController } from './core/spinQueue';
 import { SpinUiController } from './core/uiControls';
-import { defaultSpinConfig } from './defaults';
 import { defaultIdleBob, defaultSpinBlur, defaultWebGLShading } from './internalDefaults';
+import { normalizeSpinConfig } from './normalize';
 import { WebGLRenderer } from './render/webglRenderer';
 import type {
   ReelDealIdleBob,
@@ -92,12 +92,7 @@ export class ReelDeal {
   constructor(options: ReelDealOptions) {
     this.opts = options;
     this.reels = clampInt(options.reels ?? 1, 1, MAX_REELS);
-    this.spinConfig = {
-      minSpins: defaultSpinConfig.minSpins,
-      durationMs: defaultSpinConfig.durationMs ?? 0,
-      speedPxS: defaultSpinConfig.speedPxS ?? 0,
-      extraSpinsPerReel: defaultSpinConfig.extraSpinsPerReel ?? 1,
-    };
+    this.spinConfig = normalizeSpinConfig();
     this.spinBlur = { ...defaultSpinBlur };
     this.webglShading = { ...defaultWebGLShading };
     this.idleBob = { ...defaultIdleBob };
@@ -265,9 +260,25 @@ export class ReelDeal {
 
   private getStopSpringOvershootPx(): number {
     const cap = this.frameHeight * STOP_SPRING_MAX_RATIO;
-    const overshoot = Math.max(0, STOP_SPRING_OVERSHOOT_PX);
+    const overshoot = Math.max(0, STOP_SPRING_OVERSHOOT_PX) * this.getSpritePxPerCssPx();
 
     return Math.min(overshoot, cap);
+  }
+
+  private getSymbolCssHeightPx(): number {
+    const slotsViewport = this.visibleSlots * this.heightScale;
+
+    if (slotsViewport <= 0) return this.frameHeight;
+
+    return this.height > 0 ? this.height / slotsViewport : this.frameHeight;
+  }
+
+  private getSpritePxPerCssPx(): number {
+    const symbolCssHeight = this.getSymbolCssHeightPx();
+
+    if (this.frameHeight <= 0 || symbolCssHeight <= 0) return 1;
+
+    return this.frameHeight / symbolCssHeight;
   }
 
   private stop(): void {
@@ -378,7 +389,8 @@ export class ReelDeal {
             const u = clamp01((t - SPIN_TICK_START) / SPIN_TICK_RANGE);
             const env = (1 - u) ** 2;
             const phase = (baseOffset / this.frameHeight) * Math.PI * 2;
-            const amp = Math.min(SPIN_TICK_MAX_PX, this.frameHeight * 0.06);
+            const tickMaxSpritePx = SPIN_TICK_MAX_PX * this.getSpritePxPerCssPx();
+            const amp = Math.min(tickMaxSpritePx, this.frameHeight * 0.06);
 
             tick = Math.sin(phase) * env * amp;
           }
@@ -452,6 +464,11 @@ export class ReelDeal {
       }
     } else {
       if (!this.skipIdleBobAfterLastSpin) {
+        const idleBobScaled = {
+          ...this.idleBob,
+          amplitudePx: this.idleBob.amplitudePx * this.getSpritePxPerCssPx(),
+        };
+
         this.idleStartTime = updateIdleOffsets(
           now,
           {
@@ -459,7 +476,7 @@ export class ReelDeal {
             idleBaseOffsets: this.idleBaseOffsets,
             velocities: this.velocities,
           },
-          this.idleBob,
+          idleBobScaled,
           this.offsets,
           this.reels,
         );

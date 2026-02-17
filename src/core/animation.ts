@@ -65,17 +65,21 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
     distances[r] = alignDelta + loops * spriteHeight;
   }
 
+  const speedFromSymbols = Math.max(0, spinConfig.speedSymbolsS ?? 0);
+  const speedFromSymbolsPxS = speedFromSymbols > 0 ? speedFromSymbols * frameHeight : 0;
   const speedFromUser = Math.max(0, Math.floor(spinConfig.speedPxS ?? 0));
   const durationMs = Math.max(0, Math.floor(spinConfig.durationMs ?? 0));
   const baseDistance = Math.max(1, distances[0] ?? 1);
 
   const speedPxS =
-    speedFromUser > 0
-      ? speedFromUser
-      : durationMs > 0
-        ? Math.max(1, Math.round((baseDistance / durationMs) * 1000))
-        : 1;
-  const useFixedStopSchedule = speedFromUser <= 0 && durationMs > 0;
+    speedFromSymbolsPxS > 0
+      ? Math.max(1, Math.round(speedFromSymbolsPxS))
+      : speedFromUser > 0
+        ? speedFromUser
+        : durationMs > 0
+          ? Math.max(1, Math.round((baseDistance / durationMs) * 1000))
+          : 1;
+  const useFixedStopSchedule = speedFromSymbolsPxS <= 0 && speedFromUser <= 0 && durationMs > 0;
   const extraStopDelayMs = Math.round(((spriteHeight * extraSpinsPerReel) / speedPxS) * 1000);
 
   for (let r = 0; r < reels; r += 1) {
@@ -159,13 +163,18 @@ export const updateVelocities = (
 
   if (dt <= 0) return state.lastVelT;
 
-  const VELOCITY_DECAY = 0.85;
-  const VELOCITY_GAIN = 1 - VELOCITY_DECAY;
+  const LEGACY_DECAY_PER_FRAME = 0.85;
+  const LEGACY_REFERENCE_FPS = 60;
+  const VELOCITY_TAU_S = -1 / (LEGACY_REFERENCE_FPS * Math.log(LEGACY_DECAY_PER_FRAME));
+  const MAX_DT_S = 0.1;
+  const dtClamped = Math.min(dt, MAX_DT_S);
+  const velocityDecay = Math.exp(-dtClamped / VELOCITY_TAU_S);
+  const velocityGain = 1 - velocityDecay;
 
   for (let r = 0; r < offsets.length; r += 1) {
-    const v = (offsets[r] - state.lastVelOffsets[r]) / dt;
+    const v = (offsets[r] - state.lastVelOffsets[r]) / dtClamped;
 
-    state.velocities[r] = state.velocities[r] * VELOCITY_DECAY + v * VELOCITY_GAIN;
+    state.velocities[r] = state.velocities[r] * velocityDecay + v * velocityGain;
     state.lastVelOffsets[r] = offsets[r];
   }
 
