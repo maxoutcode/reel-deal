@@ -16,4 +16,7 @@ export const defaultIdleBob: ReelDealIdleBob = {
 export const defaultWebGLShading: ReelDealWebGLShading = {
   warpAngleDeg: 60,
   edgePower: 4.8,
+  highlightEnabled: true,
+  highlightIntensity: 0.92,
+  highlightRadiusPx: 14,
 };

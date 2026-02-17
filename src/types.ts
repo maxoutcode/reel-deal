@@ -28,6 +28,9 @@ export interface ReelDealIdleBob {
 export interface ReelDealWebGLShading {
   warpAngleDeg: number;
   edgePower: number;
+  highlightEnabled?: boolean;
+  highlightIntensity?: number;
+  highlightRadiusPx?: number;
 }
 
 export interface ReelDealOptions {
@@ -39,6 +42,4 @@ export interface ReelDealOptions {
   button?: HTMLButtonElement | string;
   queuedSpinStates?: ReelDealSpinState[];
   reels?: number;
-  spinConfig?: Partial<ReelDealSpinConfig>;
-  maxDpr?: number;
 }

@@ -19,6 +19,8 @@ export type RenderFrame = {
   offsets: ArrayLike<number>;
   velocities: ArrayLike<number>;
   dpr: number;
+  highlightActive?: boolean;
+  highlightFade?: number;
 };
 
 export interface Renderer {
@@ -42,6 +44,13 @@ type WebGLUniforms = {
   edgePower: WebGLUniformLocation | null;
   warpAngle: WebGLUniformLocation | null;
   blurPx: WebGLUniformLocation | null;
+  time: WebGLUniformLocation | null;
+  highlightEnabled: WebGLUniformLocation | null;
+  highlightIntensity: WebGLUniformLocation | null;
+  highlightRadiusPx: WebGLUniformLocation | null;
+  highlightFade: WebGLUniformLocation | null;
+  spriteWidth: WebGLUniformLocation | null;
+  repeatWrap: WebGLUniformLocation | null;
 };
 
 export class WebGLRenderer implements Renderer {
@@ -51,6 +60,7 @@ export class WebGLRenderer implements Renderer {
   private glTexture: WebGLTexture | null = null;
   private glAttribs: WebGLAttribs | null = null;
   private glUniforms: WebGLUniforms | null = null;
+  private textureRepeatEnabled = false;
 
   private config: Omit<RendererInit, 'canvas' | 'spriteImg'> | null = null;
   private canvas: HTMLCanvasElement | null = null;
@@ -192,19 +202,23 @@ export class WebGLRenderer implements Renderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.spriteImg);
 
     const isPowerOfTwo = (n: number): boolean => n > 0 && (n & (n - 1)) === 0;
+    const isWebGL2 =
+      typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
     const pot = isPowerOfTwo(this.config.spriteWidth) && isPowerOfTwo(this.config.spriteHeight);
 
-    if (pot) {
+    if (pot || isWebGL2) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      this.textureRepeatEnabled = true;
     } else {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.textureRepeatEnabled = false;
     }
 
     gl.useProgram(program);
@@ -232,6 +246,13 @@ export class WebGLRenderer implements Renderer {
       edgePower: gl.getUniformLocation(program, 'u_edgePower'),
       warpAngle: gl.getUniformLocation(program, 'u_warpAngle'),
       blurPx: gl.getUniformLocation(program, 'u_blurPx'),
+      time: gl.getUniformLocation(program, 'u_time'),
+      highlightEnabled: gl.getUniformLocation(program, 'u_highlightEnabled'),
+      highlightIntensity: gl.getUniformLocation(program, 'u_highlightIntensity'),
+      highlightRadiusPx: gl.getUniformLocation(program, 'u_highlightRadiusPx'),
+      highlightFade: gl.getUniformLocation(program, 'u_highlightFade'),
+      spriteWidth: gl.getUniformLocation(program, 'u_spriteWidth'),
+      repeatWrap: gl.getUniformLocation(program, 'u_repeatWrap'),
     };
   }
 
@@ -356,6 +377,21 @@ export class WebGLRenderer implements Renderer {
     const warpAngle = (Math.max(0, shading.warpAngleDeg) * Math.PI) / 180;
 
     gl.uniform1f(this.glUniforms.warpAngle, warpAngle);
+    gl.uniform1f(this.glUniforms.time, performance.now() / 1000);
+
+    const highlightOn =
+      shading.highlightEnabled !== false &&
+      (frame.highlightActive === undefined || frame.highlightActive === true);
+
+    gl.uniform1f(this.glUniforms.highlightEnabled, highlightOn ? 1 : 0);
+    gl.uniform1f(
+      this.glUniforms.highlightIntensity,
+      Math.max(0, Math.min(1, shading.highlightIntensity ?? 0.92)),
+    );
+    gl.uniform1f(this.glUniforms.highlightRadiusPx, Math.max(0, shading.highlightRadiusPx ?? 14));
+    gl.uniform1f(this.glUniforms.highlightFade, Math.max(0, Math.min(1, frame.highlightFade ?? 1)));
+    gl.uniform1f(this.glUniforms.spriteWidth, Math.max(1, this.config.spriteWidth));
+    gl.uniform1f(this.glUniforms.repeatWrap, this.textureRepeatEnabled ? 1 : 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const reelW = 1 / this.config.reels;

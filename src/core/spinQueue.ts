@@ -1,14 +1,9 @@
 import type { ReelDealSpinState } from '../types';
+import { clampInt } from '../utils/math';
 export type SpinQueueConfig = {
   slotCount: number;
   reels: number;
   initialQueue?: ReelDealSpinState[] | null;
-};
-
-export type SpinQueueEntry = {
-  state: ReelDealSpinState;
-  remaining: number;
-  isLast: boolean;
 };
 
 export class SpinQueueController {
@@ -19,26 +14,29 @@ export class SpinQueueController {
   constructor(config: SpinQueueConfig) {
     this.slotCount = Math.max(1, Math.floor(config.slotCount));
     this.reels = Math.max(1, Math.floor(config.reels));
-    this.queue = [...(config.initialQueue ?? [])];
-  }
-
-  reset(queue: ReelDealSpinState[] | null | undefined): void {
-    this.queue = [...(queue ?? [])];
+    this.queue = (config.initialQueue ?? []).map((entry) => this.normalizeState(entry));
   }
 
   hasPending(): boolean {
     return this.queue.length > 0;
   }
 
-  consume(): SpinQueueEntry | null {
+  consume(): ReelDealSpinState | null {
     if (this.queue.length === 0) return null;
 
-    const state = this.queue.shift();
+    return this.queue.shift() ?? null;
+  }
+
+  private normalizeState(state: ReelDealSpinState): ReelDealSpinState {
+    const normalizedStops = new Array(this.reels);
+
+    for (let r = 0; r < this.reels; r += 1) {
+      normalizedStops[r] = clampInt(state.stopAtSegments[r] ?? 0, 0, this.slotCount - 1);
+    }
 
     return {
-      state: state ?? { stopAtSegments: [] },
-      remaining: this.queue.length,
-      isLast: this.queue.length === 0,
+      stopAtSegments: normalizedStops,
+      callback: state.callback,
     };
   }
 }

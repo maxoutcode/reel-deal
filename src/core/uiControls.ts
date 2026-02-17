@@ -5,6 +5,7 @@ export class SpinUiController {
   private readonly handler: SpinHandler;
   private attached = false;
   private spinning = false;
+  private hasQueue = false;
 
   constructor(button: HTMLButtonElement | null, handler: SpinHandler) {
     this.button = button;
@@ -13,9 +14,11 @@ export class SpinUiController {
   }
 
   updateAvailability(hasQueue: boolean): void {
+    this.hasQueue = hasQueue;
+
     if (!this.button) return;
 
-    this.setDisabled(!hasQueue);
+    this.setDisabled(this.spinning || !this.hasQueue);
   }
 
   dispose(): void {
@@ -36,7 +39,9 @@ export class SpinUiController {
 
   private setDisabled(disabled: boolean): void {
     if (!this.button) return;
+
     this.button.disabled = disabled;
+
     if (disabled) this.button.setAttribute('aria-busy', 'true');
     else this.button.removeAttribute('aria-busy');
   }
@@ -51,7 +56,7 @@ export class SpinUiController {
       await this.handler();
     } finally {
       this.spinning = false;
-      this.setDisabled(false);
+      this.setDisabled(!this.hasQueue);
     }
   };
 }

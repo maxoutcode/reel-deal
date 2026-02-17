@@ -75,6 +75,8 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
       : durationMs > 0
         ? Math.max(1, Math.round((baseDistance / durationMs) * 1000))
         : 1;
+  const useFixedStopSchedule = speedFromUser <= 0 && durationMs > 0;
+  const extraStopDelayMs = Math.round(((spriteHeight * extraSpinsPerReel) / speedPxS) * 1000);
 
   for (let r = 0; r < reels; r += 1) {
     const distance = distances[r] ?? 0;
@@ -94,7 +96,9 @@ export const buildSpinPlan = (input: SpinPlanInput): SpinPlan => {
     deltas[r] = finalDelta;
     settleDurationMs[r] = settleDuration;
 
-    const dur = Math.round((Math.abs(finalDelta) / speedPxS) * 1000);
+    const dur = useFixedStopSchedule
+      ? durationMs + r * extraStopDelayMs
+      : Math.round((Math.abs(finalDelta) / speedPxS) * 1000);
 
     durations[r] = Math.max(0, dur);
   }

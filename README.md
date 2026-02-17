@@ -24,20 +24,18 @@ import { ReelDeal } from 'reel-deal';
 const reel = new ReelDeal({
   canvas: 'canvas',
   container: 'reelWrap',
-  sprite: new URL('./assets/reel.webp', import.meta.url).href,
+  button: 'spinBtn',
+  sprite: new URL('./assets/reel.png', import.meta.url).href,
   slotCount: 8,
   reels: 3,
   initialSegments: [3, 2, 0],
-  spinConfig: {
-    minSpins: 2,
-    durationMs: 4000,
-    speedPxS: 4000,
-    staggerMs: 300,
-  },
+  queuedSpinStates: [
+    { stopAtSegments: [1, 1, 0] },
+    { stopAtSegments: [2, 0, 2] },
+  ],
 });
 
 await reel.init();
-await reel.spinOnce([1, 1, 0]);
 ```
 <br>
 
@@ -85,6 +83,7 @@ onBeforeUnmount(() => {
 # Usage (HTML)
 ```html
 <button id="spinBtn">Spin</button>
+
 <div id="reelWrap">
   <canvas id="canvas"></canvas>
 </div>
@@ -98,34 +97,37 @@ onBeforeUnmount(() => {
 - Single vertical spritesheet.
 - Each slot is a square frame.
 - Total height is `slotCount * frameWidth`.
+- Recommended: use a POT texture (power-of-two), for example `256x2048` for 8 slots.
+- POT textures guarantee `REPEAT + mipmap` in WebGL1. In WebGL2, mipmap also works with NPOT, but POT is still the safest default.
 
 <br>
 
 # Options
-| Option             | Type                                |        Default        | Description                                                      |
-|:-------------------|:------------------------------------|:---------------------:|:-----------------------------------------------------------------|
-| `canvas`           | `HTMLCanvasElement \| string`       |           —           | Canvas element or element id.                                    |
-| `container`        | `HTMLElement \| string`             |           —           | Container element or element id.                                 |
-| `sprite`           | `string \| HTMLImageElement`        |           —           | Sprite sheet URL or image element.                               |
-| `slotCount`        | `number`                            |           —           | Number of frames in the sprite.                                  |
-| `reels`            | `number`                            |          `1`          | Number of reels (1–5).                                           |
-| `initialSegments`  | `number[]`                          |           —           | Initial stop index per reel.                                     |
-| `button`           | `HTMLButtonElement \| string`       |           —           | Optional spin button element or DOM id.                          |
-| `queuedSpinStates` | `ReelDealSpinState[]`               |           —           | Optional queue of predefined spins.                              |
-| `spinConfig`       | `Partial<ReelDealSpinConfig>`       |  `defaultSpinConfig`  | Default spin config (minSpins, durationMs, speedPxS, staggerMs). |
-| `maxDpr`           | `number`                            |          `2`          | Max device pixel ratio.                                          |
+| Option             | Type                          | Default | Description                             |
+|:-------------------|:------------------------------|:-------:|:----------------------------------------|
+| `canvas`           | `HTMLCanvasElement \| string` |    —    | Canvas element or element id.           |
+| `container`        | `HTMLElement \| string`       |    —    | Container element or element id.        |
+| `sprite`           | `string \| HTMLImageElement`  |    —    | Sprite sheet URL or image element.      |
+| `slotCount`        | `number`                      |    —    | Number of frames in the sprite.         |
+| `reels`            | `number`                      |   `1`   | Number of reels (1–5).                  |
+| `initialSegments`  | `number[]`                    |    —    | Initial stop index per reel.            |
+| `button`           | `HTMLButtonElement \| string` |    —    | Optional spin button element or DOM id. |
+| `queuedSpinStates` | `ReelDealSpinState[]`         |    —    | Optional queue of predefined spins.     |
+<br>
+
+# Queue item type
+```ts
+type ReelDealSpinState = {
+  stopAtSegments: number[];
+  callback?: (spinIndex: number, stopAtSegments: number[]) => void;
+};
+```
 <br>
 
 # Methods
 ```ts
 await reel.init();
-reel.setSegments([0, 1, 2]);
-reel.setSegment(3);
-await reel.spinOnce([1, 1, 0]);
-await reel.spinOnce([1, 1, 0], { durationMs: 3200 });
-await reel.spinQueue([{ stopAtSegments: [2, 2, 2] }]);
-reel.requestResize();
-reel.stop();
+
 reel.destroy();
 ```
 <br>

@@ -31,11 +31,8 @@ export const normalizeSpinConfig = (
 
   return {
     minSpins: nonNegativeIntOrDefault(base.minSpins, defaultSpinConfig.minSpins),
-
     durationMs: nonNegativeIntOrDefault(base.durationMs, defaultSpinConfig.durationMs ?? 0),
-
     speedPxS: nonNegativeIntOrDefault(base.speedPxS, defaultSpinConfig.speedPxS ?? 0),
-
     extraSpinsPerReel: nonNegativeIntOrDefault(
       base.extraSpinsPerReel,
       defaultSpinConfig.extraSpinsPerReel ?? 1,
@@ -76,6 +73,18 @@ export const normalizeWebGLShading = (
   return {
     warpAngleDeg: nonNegativeOrDefault(base.warpAngleDeg, defaultWebGLShading.warpAngleDeg),
     edgePower: nonNegativeOrDefault(base.edgePower, defaultWebGLShading.edgePower),
+    highlightEnabled: base.highlightEnabled !== false,
+    highlightIntensity: Math.max(
+      0,
+      Math.min(
+        1,
+        finiteOr(base.highlightIntensity, defaultWebGLShading.highlightIntensity ?? 0.92),
+      ),
+    ),
+    highlightRadiusPx: Math.max(
+      0,
+      nonNegativeOrDefault(base.highlightRadiusPx, defaultWebGLShading.highlightRadiusPx ?? 14),
+    ),
   };
 };
 
