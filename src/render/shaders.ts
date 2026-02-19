@@ -39,7 +39,7 @@ export const reelFragmentShader = `
   const float TAU = 6.2831853;
   const float HIGHLIGHT_ZONE_MIN = 0.375;
   const float HIGHLIGHT_ZONE_MAX = 0.625;
-  const int ROTATE_DIRECTIONS = 24;
+  const int ROTATE_DIRECTIONS = 64;
 
   float saturate(float x) { return clamp(x, 0.0, 1.0); }
 

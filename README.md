@@ -97,6 +97,7 @@ onBeforeUnmount(() => {
 - Single vertical spritesheet.
 - Each slot is a square frame.
 - Total height is `slotCount * frameWidth`.
+- Transparent `PNG`/`WebP` are supported; texture upload uses premultiplied alpha to keep edge blending clean.
 - Recommended: use a POT texture (power-of-two), for example `256x2048` for 8 slots.
 - POT textures guarantee `REPEAT + mipmap` in WebGL1. In WebGL2, mipmap also works with NPOT, but POT is still the safest default.
 
