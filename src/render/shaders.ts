@@ -9,6 +9,10 @@ export const reelVertexShader = `
 `;
 
 export const reelFragmentShader = `
+  #ifdef GL_OES_standard_derivatives
+  #extension GL_OES_standard_derivatives : enable
+  #endif
+
   #ifdef GL_FRAGMENT_PRECISION_HIGH
   precision highp float;
   #else
@@ -37,8 +41,8 @@ export const reelFragmentShader = `
 
   const float HALF_PI = 1.5707963;
   const float TAU = 6.2831853;
-  const float HIGHLIGHT_ZONE_MIN = 0.375;
-  const float HIGHLIGHT_ZONE_MAX = 0.625;
+  const float HIGHLIGHT_ZONE_MIN = 0.4;
+  const float HIGHLIGHT_ZONE_MAX = 0.6;
   const int ROTATE_DIRECTIONS = 64;
 
   float saturate(float x) { return clamp(x, 0.0, 1.0); }
@@ -123,10 +127,21 @@ export const reelFragmentShader = `
         float neighborAlphaAvg = neighborAlphaSum / float(ROTATE_DIRECTIONS);
         float neighborAlpha = max(mix(neighborAlphaMax, neighborAlphaAvg, 0.35), 0.0001);
 
-        float edgeBand = smoothstep(0.0, 0.30, 1.0 - base.a);
+        float baseEdge = 1.0 - base.a;
+        float baseEdgeAa = 0.0;
+        #ifdef GL_OES_standard_derivatives
+        baseEdgeAa = fwidth(baseEdge);
+        #endif
+        baseEdgeAa = max(baseEdgeAa, 1.0 / 512.0);
+        float edgeBand = smoothstep(0.0, 0.30 + baseEdgeAa, baseEdge);
         float edgeSoft = edgeBand * smoothstep(0.12, 0.68, neighborAlpha);
 
-        float thinEdge = pow(edgeSoft, 2.6);
+        float edgeSoftAa = 0.0;
+        #ifdef GL_OES_standard_derivatives
+        edgeSoftAa = fwidth(edgeSoft);
+        #endif
+        edgeSoftAa = max(edgeSoftAa, 1.0 / 512.0);
+        float thinEdge = smoothstep(0.0, edgeSoftAa * 2.0, edgeSoft) * pow(edgeSoft, 2.0);
         float outlineAlpha = thinEdge * zoneMask * u_highlightIntensity * fade;
 
         float hueT = t * 14.0 + localX * 8.0 + fullY * 4.5;

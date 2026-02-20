@@ -156,6 +156,13 @@ export class WebGLRenderer implements Renderer {
       return;
     }
 
+    const isWebGL2 =
+      typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+
+    if (!isWebGL2) {
+      gl.getExtension('OES_standard_derivatives');
+    }
+
     const program = this.createWebGLProgram(gl, reelVertexShader, reelFragmentShader);
 
     if (!program) {
@@ -204,8 +211,6 @@ export class WebGLRenderer implements Renderer {
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
 
     const isPowerOfTwo = (n: number): boolean => n > 0 && (n & (n - 1)) === 0;
-    const isWebGL2 =
-      typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
     const pot = isPowerOfTwo(this.config.spriteWidth) && isPowerOfTwo(this.config.spriteHeight);
 
     if (pot || isWebGL2) {
