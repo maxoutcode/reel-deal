@@ -70,7 +70,6 @@ export const reelFragmentShader = `
     float arcY = 0.5 + 0.5 * sin((warpedY - 0.5) * HALF_PI);
     warpedY = mix(warpedY, arcY, 0.2);
 
-    float yPx = u_offsetPx + warpedY * (u_frameHeight * u_visibleSlots);
     float vRaw = (u_offsetPx / u_spriteHeight) +
                  warpedY * ((u_frameHeight * u_visibleSlots) / u_spriteHeight);
     float v = u_repeatWrap > 0.5 ? vRaw : fract(vRaw);
@@ -133,7 +132,7 @@ export const reelFragmentShader = `
         baseEdgeAa = fwidth(baseEdge);
         #endif
         baseEdgeAa = max(baseEdgeAa, 1.0 / 512.0);
-        float edgeBand = smoothstep(0.0, 0.30 + baseEdgeAa, baseEdge);
+        float edgeBand = smoothstep(0.06, 0.34 + baseEdgeAa, baseEdge);
         float edgeSoft = edgeBand * smoothstep(0.12, 0.68, neighborAlpha);
 
         float edgeSoftAa = 0.0;
@@ -156,13 +155,15 @@ export const reelFragmentShader = `
         vec3 outlineColor = mix(accent, prism, 0.62);
         float lum = dot(outlineColor, vec3(0.299, 0.587, 0.114));
         outlineColor = mix(vec3(lum), outlineColor, 0.88);
-        float maxLum = 0.67;
+        float maxLum = 0.52;
         if (lum > maxLum) outlineColor *= maxLum / lum;
 
-        float coreLift = zoneMask * base.a * 0.11 * fade;
-        base.rgb += outlineColor * outlineAlpha;
+        float coreLift = zoneMask * base.a * 0.06 * fade;
+        float invBaseA = 1.0 - base.a;
+        vec3 outlinePremul = outlineColor * outlineAlpha;
+        base.rgb = base.rgb + outlinePremul * invBaseA;
         base.rgb += base.rgb * coreLift;
-        base.a = max(base.a, outlineAlpha + coreLift * 0.3);
+        base.a = base.a + outlineAlpha * invBaseA;
       }
     }
 
