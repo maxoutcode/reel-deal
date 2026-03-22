@@ -6,6 +6,8 @@ export interface ReelDealSpinConfig {
   extraSpinsPerReel?: number;
 }
 
+export type ReelDealPhase = 'idle' | 'spinning' | 'settling' | 'highlight';
+
 export type ReelDealSpriteSource = string | HTMLImageElement;
 
 export interface ReelDealSpinState {
@@ -43,4 +45,10 @@ export interface ReelDealOptions {
   button?: HTMLButtonElement | string;
   queuedSpinStates?: ReelDealSpinState[];
   reels?: number;
+  spinConfig?: Partial<ReelDealSpinConfig>;
+  spinBlur?: Partial<ReelDealSpinBlur>;
+  idleBob?: Partial<ReelDealIdleBob> | false;
+  webglShading?: Partial<ReelDealWebGLShading>;
+  maxDpr?: number;
+  adaptiveDpr?: boolean;
 }

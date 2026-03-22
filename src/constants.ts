@@ -1,4 +1,7 @@
 export const MAX_REELS = 5;
+export const SPIN_FIXED_STEP_MS = 1000 / 120;
+export const SPIN_MAX_CATCH_UP_STEPS_PER_FRAME = 6;
+export const SPIN_MAX_FRAME_DELTA_MS = 100;
 export const SPIN_TICK_START = 0.72;
 export const SPIN_TICK_RANGE = 0.28;
 export const SPIN_TICK_MAX_PX = 7;

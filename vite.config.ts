@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import type { UserConfig } from 'vite';
-import type { ModuleFormat } from 'rollup';
 import dts from 'vite-plugin-dts';
 
 export default defineConfig(({ command }: { command: 'build' | 'serve' }) => {
@@ -21,7 +20,7 @@ export default defineConfig(({ command }: { command: 'build' | 'serve' }) => {
         entry: 'src/index.ts',
         name: 'ReelDeal',
         formats: ['es', 'cjs', 'umd'],
-        fileName: (format: ModuleFormat) =>
+        fileName: (format) =>
           format === 'umd' ? 'index.umd.js' : `index.${format}.js`,
       },
       emptyOutDir: true,

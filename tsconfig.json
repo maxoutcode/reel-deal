@@ -32,6 +32,7 @@
     "src/render/shaders.ts",
     "src/core/animation.ts",
     "src/core/spinQueue.ts",
+    "src/core/runtime.ts",
     "src/core/uiControls.ts",
     "vite-env.d.ts",
     "vite.config.ts"

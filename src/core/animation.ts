@@ -1,5 +1,6 @@
+import { SPIN_TICK_MAX_PX, SPIN_TICK_RANGE, SPIN_TICK_START } from '../constants';
 import type { ReelDealIdleBob, ReelDealSpinConfig } from '../types';
-import { clamp01, clampInt, mod, rampHermite } from '../utils/math';
+import { clamp01, clampInt, mod, rampHermite, reelProgress } from '../utils/math';
 
 type NumericArray = number[] | Float32Array | Int32Array | Uint32Array;
 
@@ -12,6 +13,13 @@ export type SpinPlan = {
   totalDelta: number;
   allSpinZero: boolean;
   allSettleZero: boolean;
+};
+
+export type ActiveSpinPhase = 'spinning' | 'settling';
+
+export type SpinStepResult = {
+  allDone: boolean;
+  phase: ActiveSpinPhase | null;
 };
 
 export type SpinPlanInput = {
@@ -135,6 +143,81 @@ export const getStopSpringOffset = (
   const angle = Math.PI * 2 * oscillations * t;
 
   return overshoot * decay * Math.cos(angle);
+};
+
+export const applySpinPlanStep = (params: {
+  elapsedMs: number;
+  offsets: NumericArray;
+  startOffsets: NumericArray;
+  deltas: NumericArray;
+  durationMs: NumericArray;
+  settleDurationMs: NumericArray;
+  targets: NumericArray;
+  frameHeight: number;
+  spritePxPerCssPx: number;
+  stopSpringDamping: number;
+  stopSpringOscillations: number;
+}): SpinStepResult => {
+  let allDone = true;
+  let phase: ActiveSpinPhase | null = null;
+
+  for (let r = 0; r < params.offsets.length; r += 1) {
+    const duration = params.durationMs[r] ?? 0;
+    const settleDuration = params.settleDurationMs[r] ?? 0;
+    const startOffset = params.startOffsets[r] ?? 0;
+    const delta = params.deltas[r] ?? 0;
+    const targetOffset = params.targets[r] ?? startOffset + delta;
+
+    if (duration > 0 && params.elapsedMs < duration) {
+      const t = Math.min(1, params.elapsedMs / duration);
+      const eased = reelProgress(t);
+      const baseOffset = startOffset + delta * eased;
+
+      let tick = 0;
+
+      if (t > SPIN_TICK_START && params.frameHeight > 0) {
+        const u = clamp01((t - SPIN_TICK_START) / SPIN_TICK_RANGE);
+        const env = (1 - u) ** 2;
+        const phaseRadians = (baseOffset / params.frameHeight) * Math.PI * 2;
+        const tickMaxSpritePx = SPIN_TICK_MAX_PX * params.spritePxPerCssPx;
+        const amp = Math.min(tickMaxSpritePx, params.frameHeight * 0.06);
+
+        tick = Math.sin(phaseRadians) * env * amp;
+      }
+
+      params.offsets[r] = baseOffset + tick;
+      allDone = false;
+      phase = 'spinning';
+      continue;
+    }
+
+    if (settleDuration > 0) {
+      const t =
+        duration <= 0
+          ? params.elapsedMs / settleDuration
+          : (params.elapsedMs - duration) / settleDuration;
+      const u = clamp01(t);
+
+      if (u < 1) {
+        const overshoot = startOffset + delta - targetOffset;
+        const spring = getStopSpringOffset(
+          overshoot,
+          u,
+          params.stopSpringDamping,
+          params.stopSpringOscillations,
+        );
+
+        params.offsets[r] = targetOffset + spring;
+        allDone = false;
+        if (phase !== 'spinning') phase = 'settling';
+        continue;
+      }
+    }
+
+    params.offsets[r] = targetOffset;
+  }
+
+  return { allDone, phase };
 };
 
 export type VelocityState = {

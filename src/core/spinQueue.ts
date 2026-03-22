@@ -21,6 +21,22 @@ export class SpinQueueController {
     return this.queue.length > 0;
   }
 
+  size(): number {
+    return this.queue.length;
+  }
+
+  enqueue(entry: ReelDealSpinState | ReelDealSpinState[]): void {
+    const entries = Array.isArray(entry) ? entry : [entry];
+
+    for (const item of entries) {
+      this.queue.push(this.normalizeState(item));
+    }
+  }
+
+  clear(): void {
+    this.queue = [];
+  }
+
   consume(): ReelDealSpinState | null {
     if (this.queue.length === 0) return null;
 
