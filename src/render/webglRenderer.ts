@@ -18,6 +18,7 @@ export type RendererInit = {
 export type RenderFrame = {
   offsets: ArrayLike<number>;
   velocities: ArrayLike<number>;
+  blurScale?: ArrayLike<number> | null;
   dpr: number;
   highlightActive?: boolean;
   highlightFade?: number;
@@ -335,14 +336,19 @@ export class WebGLRenderer implements Renderer {
     return shader;
   }
 
-  private getSpinBlurPxForReel(reel: number, velocities: ArrayLike<number>): number {
+  private getSpinBlurPxForReel(
+    reel: number,
+    velocities: ArrayLike<number>,
+    blurScale: ArrayLike<number> | null,
+  ): number {
     if (!this.config) return 0;
 
     const speed = Math.abs(velocities[reel] ?? 0);
     const speedAtMax = Math.max(1, this.config.spinBlur.speedAtMax);
     const t = clamp01(speed / speedAtMax);
+    const scale = Math.max(0, Math.min(1, blurScale?.[reel] ?? 1));
 
-    return t * Math.max(0, this.config.spinBlur.maxPx);
+    return t * Math.max(0, this.config.spinBlur.maxPx) * scale;
   }
 
   private renderWebGL(frame: RenderFrame): void {
@@ -410,7 +416,10 @@ export class WebGLRenderer implements Renderer {
       const offsetPx = mod(frame.offsets[r], this.config.spriteHeight);
 
       gl.uniform1f(this.glUniforms.offsetPx, offsetPx);
-      gl.uniform1f(this.glUniforms.blurPx, this.getSpinBlurPxForReel(r, frame.velocities));
+      gl.uniform1f(
+        this.glUniforms.blurPx,
+        this.getSpinBlurPxForReel(r, frame.velocities, frame.blurScale ?? null),
+      );
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
   }

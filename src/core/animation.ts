@@ -1,4 +1,4 @@
-import { SPIN_TICK_MAX_PX, SPIN_TICK_RANGE, SPIN_TICK_START } from '../constants';
+import { SPIN_TICK_RANGE, SPIN_TICK_START } from '../constants';
 import type { ReelDealIdleBob, ReelDealSpinConfig } from '../types';
 import { clamp01, clampInt, mod, rampHermite, reelProgress } from '../utils/math';
 
@@ -157,6 +157,7 @@ export const applySpinPlanStep = (params: {
   spritePxPerCssPx: number;
   stopSpringDamping: number;
   stopSpringOscillations: number;
+  spinTickMaxPx: number;
 }): SpinStepResult => {
   let allDone = true;
   let phase: ActiveSpinPhase | null = null;
@@ -179,7 +180,7 @@ export const applySpinPlanStep = (params: {
         const u = clamp01((t - SPIN_TICK_START) / SPIN_TICK_RANGE);
         const env = (1 - u) ** 2;
         const phaseRadians = (baseOffset / params.frameHeight) * Math.PI * 2;
-        const tickMaxSpritePx = SPIN_TICK_MAX_PX * params.spritePxPerCssPx;
+        const tickMaxSpritePx = Math.max(0, params.spinTickMaxPx) * params.spritePxPerCssPx;
         const amp = Math.min(tickMaxSpritePx, params.frameHeight * 0.06);
 
         tick = Math.sin(phaseRadians) * env * amp;

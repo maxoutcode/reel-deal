@@ -4,6 +4,7 @@ import {
   SPIN_FIXED_STEP_MS,
   SPIN_MAX_CATCH_UP_STEPS_PER_FRAME,
   SPIN_MAX_FRAME_DELTA_MS,
+  SPIN_TICK_MAX_PX,
   STOP_SPRING_DAMPING,
   STOP_SPRING_MAX_RATIO,
   STOP_SPRING_OSCILLATIONS,
@@ -60,6 +61,10 @@ type SpinAnimation = {
 export class ReelDeal {
   private static readonly HIGHLIGHT_FADE_IN_MS = 220;
   private static readonly COARSE_POINTER_MAX_DPR = 1.5;
+  private static readonly COARSE_POINTER_BLUR_MAX_PX = 1.35;
+  private static readonly COARSE_POINTER_TICK_MAX_PX = 1.6;
+  private static readonly COARSE_POINTER_STOP_SPRING_RATIO = 0.4;
+  private static readonly SETTLE_BLUR_FADE_START = 0.18;
   private static readonly PERF_WINDOW_MS = 1500;
   private static readonly PERF_BAD_P95_DT_MS = 19;
   private static readonly PERF_GOOD_P95_DT_MS = 17.5;
@@ -98,6 +103,7 @@ export class ReelDeal {
 
   private readonly offsets: number[];
   private readonly velocities: number[];
+  private readonly blurScalePerReel: number[];
   private lastVelT: number | null = null;
   private readonly lastVelOffsets: number[];
   private idleStartTime: number | null = null;
@@ -128,12 +134,18 @@ export class ReelDeal {
     this.opts = options;
     this.reels = clampInt(options.reels ?? 1, 1, MAX_REELS);
     this.spinConfig = normalizeSpinConfig(options.spinConfig);
-    this.spinBlur = normalizeSpinBlur(options.spinBlur);
+    this.isCoarsePointerDevice = ReelDeal.detectCoarsePointerDevice();
+    const normalizedSpinBlur = normalizeSpinBlur(options.spinBlur);
+    this.spinBlur = this.isCoarsePointerDevice
+      ? {
+          ...normalizedSpinBlur,
+          maxPx: Math.min(normalizedSpinBlur.maxPx, ReelDeal.COARSE_POINTER_BLUR_MAX_PX),
+        }
+      : normalizedSpinBlur;
     this.webglShading = normalizeWebGLShading(options.webglShading);
     this.idleBob = normalizeIdleBob(options.idleBob);
     this.maxDpr = normalizeMaxDpr(options.maxDpr);
     this.adaptiveDpr = options.adaptiveDpr !== false;
-    this.isCoarsePointerDevice = ReelDeal.detectCoarsePointerDevice();
     this.dprCap = this.isCoarsePointerDevice
       ? Math.min(this.maxDpr, ReelDeal.COARSE_POINTER_MAX_DPR)
       : this.maxDpr;
@@ -148,6 +160,7 @@ export class ReelDeal {
 
     this.offsets = new Array(this.reels).fill(0);
     this.velocities = new Array(this.reels).fill(0);
+    this.blurScalePerReel = new Array(this.reels).fill(0);
     this.lastVelOffsets = new Array(this.reels).fill(0);
     this.idleBaseOffsets = new Array(this.reels).fill(0);
   }
@@ -338,6 +351,7 @@ export class ReelDeal {
       prevOffsets: [...plan.startOffsets],
       currOffsets: [...plan.startOffsets],
     };
+    this.blurScalePerReel.fill(1);
     this.idleStartTime = null;
     startSpinRuntime(this.runtime);
 
@@ -350,9 +364,18 @@ export class ReelDeal {
 
   private getStopSpringOvershootPx(): number {
     const cap = this.frameHeight * STOP_SPRING_MAX_RATIO;
-    const overshoot = Math.max(0, STOP_SPRING_OVERSHOOT_PX) * this.getSpritePxPerCssPx();
+    const mobileRatio = this.isCoarsePointerDevice ? ReelDeal.COARSE_POINTER_STOP_SPRING_RATIO : 1;
+    const overshoot =
+      Math.max(0, STOP_SPRING_OVERSHOOT_PX) * this.getSpritePxPerCssPx() * mobileRatio;
 
     return Math.min(overshoot, cap);
+  }
+
+  private getSpinTickMaxPx(): number {
+    if (this.isCoarsePointerDevice) {
+      return Math.min(SPIN_TICK_MAX_PX, ReelDeal.COARSE_POINTER_TICK_MAX_PX);
+    }
+    return SPIN_TICK_MAX_PX;
   }
 
   private getSymbolCssHeightPx(): number {
@@ -374,6 +397,7 @@ export class ReelDeal {
   private stop(): void {
     this.rafLoop.stop();
     this.anim = null;
+    this.blurScalePerReel.fill(0);
     this.resolvePendingSpins();
     this.lastVelT = null;
     this.lastFramePerfNow = null;
@@ -506,6 +530,7 @@ export class ReelDeal {
         spritePxPerCssPx: this.getSpritePxPerCssPx(),
         stopSpringDamping: STOP_SPRING_DAMPING,
         stopSpringOscillations: STOP_SPRING_OSCILLATIONS,
+        spinTickMaxPx: this.getSpinTickMaxPx(),
       });
 
       if (step.phase) {
@@ -555,9 +580,34 @@ export class ReelDeal {
     }
 
     this.anim = null;
+    this.blurScalePerReel.fill(0);
     this.enterRestPhase(now);
     this.render();
     this.resolvePendingSpins();
+  }
+
+  private updateBlurScaleForCurrentSpin(): void {
+    if (!this.anim) {
+      this.blurScalePerReel.fill(0);
+      return;
+    }
+
+    const fadeStart = ReelDeal.SETTLE_BLUR_FADE_START;
+    for (let r = 0; r < this.reels; r += 1) {
+      const duration = Math.max(0, this.anim.durationMs[r] ?? 0);
+      const settleDuration = Math.max(0, this.anim.settleDurationMs[r] ?? 0);
+      const elapsed = this.anim.elapsedMs;
+
+      if (settleDuration <= 0 || elapsed <= duration) {
+        this.blurScalePerReel[r] = 1;
+        continue;
+      }
+
+      const settleT = clamp01((elapsed - duration) / settleDuration);
+      const fadeT = clamp01((settleT - fadeStart) / Math.max(0.0001, 1 - fadeStart));
+      const inv = 1 - fadeT;
+      this.blurScalePerReel[r] = inv * inv;
+    }
   }
 
   private handleQueuedSpin = async (): Promise<void> => {
@@ -592,6 +642,7 @@ export class ReelDeal {
         },
         this.offsets,
       );
+      this.updateBlurScaleForCurrentSpin();
 
       this.render();
 
@@ -644,6 +695,7 @@ export class ReelDeal {
     this.renderer.render({
       offsets: this.offsets,
       velocities: this.velocities,
+      blurScale: this.anim ? this.blurScalePerReel : null,
       dpr: this.dpr,
       highlightActive,
       highlightFade,
