@@ -63,8 +63,11 @@ export class ReelDeal {
   private static readonly COARSE_POINTER_MAX_DPR = 1.5;
   private static readonly COARSE_POINTER_BLUR_MAX_PX = 1.35;
   private static readonly COARSE_POINTER_TICK_MAX_PX = 1.6;
-  private static readonly COARSE_POINTER_STOP_SPRING_RATIO = 0.4;
-  private static readonly SETTLE_BLUR_FADE_START = 0.18;
+  private static readonly COARSE_POINTER_STOP_SPRING_RATIO = 0.55;
+  private static readonly COARSE_POINTER_STOP_SETTLE_MS_RATIO = 1.22;
+  private static readonly COARSE_POINTER_STOP_DAMPING_RATIO = 0.82;
+  private static readonly COARSE_POINTER_STOP_OSCILLATIONS_RATIO = 0.88;
+  private static readonly SETTLE_BLUR_FADE_START = 0.34;
   private static readonly PERF_WINDOW_MS = 1500;
   private static readonly PERF_BAD_P95_DT_MS = 19;
   private static readonly PERF_GOOD_P95_DT_MS = 17.5;
@@ -311,7 +314,7 @@ export class ReelDeal {
     this.ensureReady();
 
     const stopSpringOvershootPx = this.getStopSpringOvershootPx();
-    const stopSpringSettleMs = Math.max(0, STOP_SPRING_SETTLE_MS);
+    const stopSpringSettleMs = this.getStopSpringSettleMs();
 
     const plan = buildSpinPlan({
       stopAtSegments,
@@ -369,6 +372,22 @@ export class ReelDeal {
       Math.max(0, STOP_SPRING_OVERSHOOT_PX) * this.getSpritePxPerCssPx() * mobileRatio;
 
     return Math.min(overshoot, cap);
+  }
+
+  private getStopSpringSettleMs(): number {
+    const baseSettle = Math.max(0, STOP_SPRING_SETTLE_MS);
+    if (!this.isCoarsePointerDevice) return baseSettle;
+    return Math.round(baseSettle * ReelDeal.COARSE_POINTER_STOP_SETTLE_MS_RATIO);
+  }
+
+  private getStopSpringDamping(): number {
+    if (!this.isCoarsePointerDevice) return STOP_SPRING_DAMPING;
+    return STOP_SPRING_DAMPING * ReelDeal.COARSE_POINTER_STOP_DAMPING_RATIO;
+  }
+
+  private getStopSpringOscillations(): number {
+    if (!this.isCoarsePointerDevice) return STOP_SPRING_OSCILLATIONS;
+    return STOP_SPRING_OSCILLATIONS * ReelDeal.COARSE_POINTER_STOP_OSCILLATIONS_RATIO;
   }
 
   private getSpinTickMaxPx(): number {
@@ -528,8 +547,8 @@ export class ReelDeal {
         targets: this.anim.targets,
         frameHeight: this.frameHeight,
         spritePxPerCssPx: this.getSpritePxPerCssPx(),
-        stopSpringDamping: STOP_SPRING_DAMPING,
-        stopSpringOscillations: STOP_SPRING_OSCILLATIONS,
+        stopSpringDamping: this.getStopSpringDamping(),
+        stopSpringOscillations: this.getStopSpringOscillations(),
         spinTickMaxPx: this.getSpinTickMaxPx(),
       });
 
